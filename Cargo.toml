@@ -1,0 +1,10 @@
+[package]
+name = "Cargui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+slint = "1.13.1"
+anyhow = "1"
+shell-words = "1"
+rfd = "0.14"

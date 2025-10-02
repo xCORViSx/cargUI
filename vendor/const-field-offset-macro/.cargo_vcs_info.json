@@ -1,0 +1,6 @@
+{
+  "git": {
+    "sha1": "7df9b3cbb70b46233bf4d49966d65f94f09fa6bd"
+  },
+  "path_in_vcs": "helper_crates/const-field-offset/macro"
+}

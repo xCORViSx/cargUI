@@ -1,0 +1,32 @@
+[package]
+name = "cpp_macros"
+version = "0.5.10"
+authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <olivier.goffart@slint-ui.com>"]
+edition = "2018"
+description = "Procedural macro implementation for the `cpp` crate"
+readme = "../README.md"
+license = "MIT/Apache-2.0"
+keywords = ["c", "cxx", "ffi", "compiler"]
+categories = ["development-tools::ffi"]
+repository = "https://github.com/mystor/rust-cpp"
+documentation = "https://docs.rs/cpp_macros"
+
+[features]
+# Ignore compilations error of the C++ code when building the documentation, as the docs.rs server
+# might not have the required libraries
+docs-only = []
+
+[lib]
+proc-macro = true
+
+[dependencies]
+lazy_static = "1.0"
+cpp_common = { path = "../cpp_common", version = "=0.5.10" }
+syn = { version = "2.0", features=["full", "visit"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+aho-corasick = "1.0"
+byteorder = "1.0"
+
+[package.metadata.docs.rs]
+features = [ "docs-only" ]

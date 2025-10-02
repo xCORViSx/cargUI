@@ -1,0 +1,18 @@
+[package]
+name = "codemap-diagnostic"
+version = "0.1.2"
+authors = ["Kevin Mehall <km@kevinmehall.net>", "The Rust Project Developers"]
+license = "MIT/Apache-2.0"
+repository = "https://github.com/kevinmehall/codemap-diagnostic"
+documentation = "https://docs.rs/codemap-diagnostic"
+description = """
+[DEPRECATED] Library for displaying compiler error messages, extracted from rustc.
+"""
+readme = "README.md"
+keywords = ["compiler", "error", "warning", "format", "rustc"]
+categories = ["command-line-interface"]
+rust-version = "1.70"
+
+[dependencies]
+codemap = { version = "0.1.0" }
+termcolor = "1.0.4"

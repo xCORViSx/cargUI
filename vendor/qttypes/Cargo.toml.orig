@@ -1,0 +1,51 @@
+[package]
+name = "qttypes"
+version = "0.2.12"
+edition = "2018"
+authors = ["Olivier Goffart <olivier.goffart@slint.dev>"]
+build = "build.rs"
+description = "Manually maintained buildings for Qt value types"
+readme = "README.md"
+license = "MIT"
+categories = ["api-bindings"]
+keywords = ["Qt", "QtCore", "QtGui"]
+repository = "https://github.com/woboq/qmetaobject-rs"
+links = "qt"
+rust-version = "1.56"
+
+[features]
+# When this feature is enabled (the default), the build script will panic with an error
+# if Qt is not found.
+required = []
+
+# Link against QtQuick
+qtquick = []
+# Link against QtWebEngine
+qtwebengine = []
+# Link against QtQuickControls2
+qtquickcontrols2 = []
+# Link against QtMultimedia
+qtmultimedia = []
+# Link against QtMultimediaWidgets
+qtmultimediawidgets = []
+# Link against QtSql
+qtsql = []
+# Link against QtTest
+qttest = []
+
+default = ["required"]
+
+[dependencies]
+cpp = "0.5.6"
+chrono = { version = "0.4", optional = true }
+
+[build-dependencies]
+cpp_build = "0.5.6"
+semver = "1"
+
+[dev-dependencies]
+cpp_build = "0.5.6"
+tempfile = { version = "3.4.0", default-features = false }
+
+[package.metadata.docs.rs]
+dependencies = [ "qtbase5-dev", "qtdeclarative5-dev" ]
