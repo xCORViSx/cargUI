@@ -1,0 +1,998 @@
+{
+  "name": "cargui",
+  "displayName": "cargUI - Cargo GUI",
+  "description": "Native VS Code UI for cargo commands",
+  "version": "0.2.0",
+  "publisher": "CORViS",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/cargui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_USERNAME/cargui/issues"
+  },
+  "homepage": "https://github.com/YOUR_USERNAME/cargui#readme",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onLanguage:rust",
+    "workspaceContains:Cargo.toml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "cargUI - Cargo GUI",
+      "properties": {
+        "cargui.argumentCategories": {
+          "type": "array",
+          "default": [
+            {
+              "name": "Common",
+              "arguments": [
+                "--verbose",
+                "--quiet",
+                "--color always"
+              ]
+            }
+          ],
+          "description": "Categorized arguments that can be checked/unchecked and passed to cargo commands.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Category name"
+              },
+              "arguments": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Arguments in this category"
+              }
+            },
+            "required": ["name", "arguments"]
+          }
+        },
+        "cargui.arguments": {
+          "type": "array",
+          "default": [
+            "--verbose",
+            "--quiet",
+            "--color always",
+            "--jobs 4"
+          ],
+          "description": "[DEPRECATED] Use cargui.argumentCategories instead. Old flat list of arguments for backward compatibility.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cargui.environmentVariables": {
+          "type": "array",
+          "default": [
+            "RUST_BACKTRACE=1",
+            "RUST_LOG=info",
+            "CARGO_INCREMENTAL=1"
+          ],
+          "description": "Reusable environment variables (KEY=VALUE format) that can be checked/unchecked and passed to cargo commands.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cargui.rustup.checkStable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check for stable toolchain updates and show notifications"
+        },
+        "cargui.rustup.checkBeta": {
+          "type": "boolean",
+          "default": false,
+          "description": "Check for beta toolchain updates and show notifications"
+        },
+        "cargui.rustup.checkNightly": {
+          "type": "boolean",
+          "default": false,
+          "description": "Check for nightly toolchain updates and show notifications"
+        },
+        "cargui.snapshots": {
+          "type": "array",
+          "default": [
+            {
+              "name": "justmain",
+              "mode": "debug",
+              "targets": [],
+              "features": [],
+              "arguments": [],
+              "envVars": []
+            }
+          ],
+          "description": "Snapshots that save combinations of mode, targets, features, arguments, and environment variables.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Snapshot name"
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["debug", "release"],
+                "description": "Build mode"
+              },
+              "targets": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Checked target names"
+              },
+              "features": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Checked feature names"
+              },
+              "arguments": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Checked arguments"
+              },
+              "envVars": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Checked environment variables"
+              },
+              "workspaceMember": {
+                "type": "string",
+                "description": "Selected workspace member (undefined for root, 'all' for all members, or specific member name)"
+              },
+              "checkedWorkspaceMembers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Array of checked workspace member names for multi-package builds"
+              }
+            }
+          }
+        },
+        "cargui.activeSnapshot": {
+          "type": "string",
+          "default": "",
+          "description": "Name of the currently active build profile (empty for no profile)"
+        },
+        "cargui.customCommands": {
+          "type": "array",
+          "default": [
+            {
+              "name": "Search Crates",
+              "command": "cargo search serde"
+            },
+            {
+              "name": "Add Dependency",
+              "command": "cargo add tokio"
+            },
+            {
+              "name": "Tree Dependencies",
+              "command": "cargo tree"
+            },
+            {
+              "name": "Audit Security",
+              "command": "cargo audit"
+            },
+            {
+              "name": "Expand Macros",
+              "command": "cargo expand"
+            }
+          ],
+          "description": "Custom cargo commands that can be run with a single click.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Display name for the custom command"
+              },
+              "command": {
+                "type": "string",
+                "description": "Full cargo command to execute (with 'cargo' prefix)"
+              }
+            }
+          }
+        },
+        "cargui.dontWarnCheckedOverSelected": {
+          "type": "boolean",
+          "default": false,
+          "description": "Don't warn when checked members differ from selected member during build actions."
+        }
+      }
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "cargoTargets",
+          "name": "cargUI"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "cargui.open",
+        "title": "Show Cargo Quick Pick",
+        "category": "cargUI",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "cargui.new",
+        "title": "New Project",
+        "category": "cargUI",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "cargui.newGlobal",
+        "title": "Cargo: New Project",
+        "category": "cargUI",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "cargui.configureUnregistered",
+        "title": "Cargo: Configure Unregistered Items",
+        "category": "cargUI",
+        "icon": "$(lightbulb-autofix)"
+      },
+      {
+        "command": "cargui.build",
+        "title": "Build",
+        "category": "cargUI",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "cargui.run",
+        "title": "Run",
+        "category": "cargUI",
+        "icon": "$(play)"
+      },
+      {
+        "command": "cargui.test",
+        "title": "Test",
+        "category": "cargUI",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "cargui.check",
+        "title": "Check",
+        "category": "cargUI",
+        "icon": "$(check)"
+      },
+      {
+        "command": "cargui.clean",
+        "title": "Clean",
+        "category": "cargUI",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cargui.fix",
+        "title": "Fix",
+        "category": "cargUI",
+        "icon": "$(wrench)"
+      },
+      {
+        "command": "cargui.fmt",
+        "title": "Format",
+        "category": "cargUI",
+        "icon": "$(paintcan)"
+      },
+      {
+        "command": "cargui.doc",
+        "title": "Doc",
+        "category": "cargUI",
+        "icon": "$(book)"
+      },
+      {
+        "command": "cargui.toggleRelease",
+        "title": "Toggle Debug/Release Mode",
+        "category": "cargUI",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "cargui.runTarget",
+        "title": "Run",
+        "category": "cargUI",
+        "icon": "$(play)"
+      },
+      {
+        "command": "cargui.buildTarget",
+        "title": "Build Target",
+        "category": "cargUI",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "cargui.buildWithFeature",
+        "title": "Build",
+        "category": "cargUI",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "cargui.viewInCargoToml",
+        "title": "View in Cargo.toml",
+        "category": "cargUI",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "cargui.viewBinaryTarget",
+        "title": "View Target File",
+        "category": "cargUI",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "cargui.toggleAllFeatures",
+        "title": "Toggle All Features",
+        "category": "cargUI",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "cargui.toggleAllTargets",
+        "title": "Toggle All Targets",
+        "category": "cargUI",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "cargui.toggleAllWorkspaceMembers",
+        "title": "Toggle All Workspace Members",
+        "category": "cargUI",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "cargui.selectWorkspaceMember",
+        "title": "Select Workspace Member",
+        "category": "cargUI",
+        "icon": "$(check)"
+      },
+      {
+        "command": "cargui.addArgument",
+        "title": "Add Argument...",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.editArgument",
+        "title": "Edit Argument",
+        "category": "cargUI",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "cargui.removeArgument",
+        "title": "Remove Argument",
+        "category": "cargUI",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cargui.deleteSelected",
+        "title": "Delete Selected Item",
+        "category": "cargUI"
+      },
+      {
+        "command": "cargui.resetArguments",
+        "title": "Reset Arguments to Defaults",
+        "category": "cargUI",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "cargui.addEnvVar",
+        "title": "Add Environment Variable...",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.editEnvVar",
+        "title": "Edit Environment Variable",
+        "category": "cargUI",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "cargui.removeEnvVar",
+        "title": "Remove Environment Variable",
+        "category": "cargUI",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cargui.resetEnvVars",
+        "title": "Reset Environment Variables to Defaults",
+        "category": "cargUI",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "cargui.addCustomCommand",
+        "title": "Add Custom Command...",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.editCustomCommand",
+        "title": "Edit Custom Command",
+        "category": "cargUI",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "cargui.removeCustomCommand",
+        "title": "Remove Custom Command",
+        "category": "cargUI",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cargui.resetCustomCommands",
+        "title": "Reset Custom Commands to Defaults",
+        "category": "cargUI",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "cargui.runCustomCommand",
+        "title": "Run Custom Command",
+        "category": "cargUI",
+        "icon": "$(play)"
+      },
+      {
+        "command": "cargui.createSnapshot",
+        "title": "Create Build Snapshot...",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.editSnapshot",
+        "title": "Edit Snapshot",
+        "category": "cargUI",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "cargui.deleteSnapshot",
+        "title": "Delete Snapshot",
+        "category": "cargUI",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cargui.applySnapshot",
+        "title": "Apply Snapshot",
+        "category": "cargUI",
+        "icon": "$(check)"
+      },
+      {
+        "command": "cargui.toggleWatch",
+        "title": "Toggle Watch Mode",
+        "category": "cargUI",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "cargui.update",
+        "title": "Update",
+        "category": "cargUI",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cargui.showKeybindings",
+        "title": "Show Keybindings",
+        "category": "cargUI",
+        "icon": "$(keyboard)"
+      },
+      {
+        "command": "cargui.registerAsBinary",
+        "title": "Register as Binary",
+        "category": "cargUI",
+        "icon": "$(file-binary)"
+      },
+      {
+        "command": "cargui.registerAsExample",
+        "title": "Register as Example",
+        "category": "cargUI",
+        "icon": "$(note)"
+      },
+      {
+        "command": "cargui.registerAsTest",
+        "title": "Register as Test",
+        "category": "cargUI",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "cargui.registerAsBenchmark",
+        "title": "Register as Benchmark",
+        "category": "cargUI",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "cargui.formatCargoToml",
+        "title": "Format Cargo.toml",
+        "category": "cargUI",
+        "icon": "$(symbol-namespace)"
+      },
+      {
+        "command": "cargui.viewOnCratesIo",
+        "title": "View on crates.io",
+        "category": "cargUI",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "cargui.viewDependencyDocs",
+        "title": "View Documentation",
+        "category": "cargUI",
+        "icon": "$(book)"
+      },
+      {
+        "command": "cargui.rescanUnknownTargets",
+        "title": "Rescan for Unknowns",
+        "category": "cargUI",
+        "icon": "$(search)"
+      },
+      {
+        "command": "cargui.rescanUndeclaredFeatures",
+        "title": "Rescan for Undeclareds",
+        "category": "cargUI",
+        "icon": "$(search)"
+      },
+      {
+        "command": "cargui.moveTargetToStandardLocation",
+        "title": "Move to Standard Location",
+        "category": "cargUI",
+        "icon": "$(file-symlink-directory)"
+      },
+      {
+        "command": "cargui.copyDependencyLine",
+        "title": "Copy Dependency Line",
+        "category": "cargUI",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "cargui.changeDependencyVersion",
+        "title": "Change Version",
+        "category": "cargUI",
+        "icon": "$(versions)"
+      },
+      {
+        "command": "cargui.removeDependency",
+        "title": "Remove Dependency",
+        "category": "cargUI",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cargui.viewDependencyInCargoToml",
+        "title": "View in Cargo.toml",
+        "category": "cargUI",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "cargui.updateSelectedDependencies",
+        "title": "Change Version",
+        "category": "cargUI",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "cargui.addWorkspaceDepsToMember",
+        "title": "Add to Member",
+        "category": "cargUI",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "cargui.addDependency",
+        "title": "Add Dependency",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.addProductionDependency",
+        "title": "Add Production Dependency",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.addDevDependency",
+        "title": "Add Dev Dependency",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.addBuildDependency",
+        "title": "Add Build Dependency",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.addWorkspaceDependency",
+        "title": "Add Workspace Dependency",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.toggleAllDependencies",
+        "title": "Check All Dependencies",
+        "category": "cargUI",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "cargui.toggleDependencyType",
+        "title": "Check All",
+        "category": "cargUI",
+        "icon": "$(checklist)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "cargui.new",
+          "when": "view == cargoTargets",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cargui.build",
+          "when": "view == cargoTargets",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cargui.run",
+          "when": "view == cargoTargets",
+          "group": "navigation@3"
+        },
+        {
+          "command": "cargui.test",
+          "when": "view == cargoTargets",
+          "group": "navigation@4"
+        },
+        {
+          "command": "cargui.check",
+          "when": "view == cargoTargets",
+          "group": "navigation@5"
+        },
+        {
+          "command": "cargui.clean",
+          "when": "view == cargoTargets",
+          "group": "navigation@6"
+        },
+        {
+          "command": "cargui.fix",
+          "when": "view == cargoTargets",
+          "group": "navigation@7"
+        },
+        {
+          "command": "cargui.fmt",
+          "when": "view == cargoTargets",
+          "group": "navigation@8"
+        },
+        {
+          "command": "cargui.doc",
+          "when": "view == cargoTargets",
+          "group": "navigation@9"
+        },
+        {
+          "command": "cargui.update",
+          "when": "view == cargoTargets",
+          "group": "navigation@10"
+        },
+        {
+          "command": "cargui.formatCargoToml",
+          "when": "view == cargoTargets",
+          "group": "navigation@11"
+        },
+        {
+          "command": "cargui.showKeybindings",
+          "when": "view == cargoTargets",
+          "group": "settings@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "cargui.newGlobal",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "cargui.viewInCargoToml",
+          "when": "view == cargoTargets && viewItem == target",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cargui.viewBinaryTarget",
+          "when": "view == cargoTargets && viewItem == target",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cargui.moveTargetToStandardLocation",
+          "when": "view == cargoTargets && viewItem == target",
+          "group": "1_file@1"
+        },
+        {
+          "command": "cargui.toggleAllFeatures",
+          "when": "view == cargoTargets && viewItem == featuresCategory",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargui.rescanUndeclaredFeatures",
+          "when": "view == cargoTargets && viewItem == featuresCategory",
+          "group": "inline@2"
+        },
+        {
+          "command": "cargui.toggleAllTargets",
+          "when": "view == cargoTargets && viewItem == targetsCategory",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargui.rescanUnknownTargets",
+          "when": "view == cargoTargets && viewItem == targetsCategory",
+          "group": "inline@2"
+        },
+        {
+          "command": "cargui.toggleAllWorkspaceMembers",
+          "when": "view == cargoTargets && viewItem == workspaceCategory",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.addArgument",
+          "when": "view == cargoTargets && viewItem == argumentsCategory",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargui.resetArguments",
+          "when": "view == cargoTargets && viewItem == argumentsCategory",
+          "group": "inline@2"
+        },
+        {
+          "command": "cargui.editArgument",
+          "when": "view == cargoTargets && viewItem == argument",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.removeArgument",
+          "when": "view == cargoTargets && viewItem == argument",
+          "group": "edit@1"
+        },
+        {
+          "command": "cargui.addEnvVar",
+          "when": "view == cargoTargets && viewItem == envVarsCategory",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargui.resetEnvVars",
+          "when": "view == cargoTargets && viewItem == envVarsCategory",
+          "group": "inline@2"
+        },
+        {
+          "command": "cargui.editEnvVar",
+          "when": "view == cargoTargets && viewItem == envVar",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.removeEnvVar",
+          "when": "view == cargoTargets && viewItem == envVar",
+          "group": "edit@1"
+        },
+        {
+          "command": "cargui.createSnapshot",
+          "when": "view == cargoTargets && viewItem == snapshotsCategory",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.applySnapshot",
+          "when": "view == cargoTargets && viewItem == snapshot",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargui.editSnapshot",
+          "when": "view == cargoTargets && viewItem == snapshot",
+          "group": "inline@2"
+        },
+        {
+          "command": "cargui.deleteSnapshot",
+          "when": "view == cargoTargets && viewItem == snapshot",
+          "group": "edit@1"
+        },
+        {
+          "command": "cargui.addCustomCommand",
+          "when": "view == cargoTargets && viewItem == customCommandsCategory",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargui.resetCustomCommands",
+          "when": "view == cargoTargets && viewItem == customCommandsCategory",
+          "group": "inline@2"
+        },
+        {
+          "command": "cargui.editCustomCommand",
+          "when": "view == cargoTargets && viewItem == customCommand",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.removeCustomCommand",
+          "when": "view == cargoTargets && viewItem == customCommand",
+          "group": "edit@1"
+        },
+        {
+          "command": "cargui.updateSelectedDependencies",
+          "when": "view == cargoTargets && viewItem == dependenciesCategory",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.addDependency",
+          "when": "view == cargoTargets && viewItem == dependenciesCategory",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargui.toggleAllDependencies",
+          "when": "view == cargoTargets && viewItem == dependenciesCategory",
+          "group": "inline@2"
+        },
+        {
+          "command": "cargui.addWorkspaceDepsToMember",
+          "when": "view == cargoTargets && viewItem =~ /dependencyTypeFolder/ && cargui.isWorkspace",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargui.toggleDependencyType",
+          "when": "view == cargoTargets && viewItem =~ /dependencyTypeFolder/",
+          "group": "inline@2"
+        },
+        {
+          "command": "cargui.updateSelectedDependencies",
+          "when": "view == cargoTargets && viewItem =~ /dependencyTypeFolder/",
+          "group": "inline@3"
+        },
+        {
+          "command": "cargui.addProductionDependency",
+          "when": "view == cargoTargets && viewItem == dependencyTypeFolder-production",
+          "group": "inline@4"
+        },
+        {
+          "command": "cargui.addDevDependency",
+          "when": "view == cargoTargets && viewItem == dependencyTypeFolder-dev",
+          "group": "inline@4"
+        },
+        {
+          "command": "cargui.addBuildDependency",
+          "when": "view == cargoTargets && viewItem == dependencyTypeFolder-build",
+          "group": "inline@4"
+        },
+        {
+          "command": "cargui.addWorkspaceDependency",
+          "when": "view == cargoTargets && viewItem == dependencyTypeFolder-workspace",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.viewBinaryTarget",
+          "when": "view == cargoTargets && viewItem == unknownTarget",
+          "group": "2_navigation@1"
+        },
+        {
+          "command": "cargui.viewInCargoToml",
+          "when": "view == cargoTargets && viewItem == unknownTarget",
+          "group": "2_navigation@2"
+        },
+        {
+          "command": "cargui.registerAsBinary",
+          "when": "view == cargoTargets && viewItem == unknownTarget",
+          "group": "1_register@1"
+        },
+        {
+          "command": "cargui.registerAsExample",
+          "when": "view == cargoTargets && viewItem == unknownTarget",
+          "group": "1_register@2"
+        },
+        {
+          "command": "cargui.registerAsTest",
+          "when": "view == cargoTargets && viewItem == unknownTarget",
+          "group": "1_register@3"
+        },
+        {
+          "command": "cargui.registerAsBenchmark",
+          "when": "view == cargoTargets && viewItem == unknownTarget",
+          "group": "1_register@4"
+        },
+        {
+          "command": "cargui.viewOnCratesIo",
+          "when": "view == cargoTargets && viewItem == dependency",
+          "group": "1_view@1"
+        },
+        {
+          "command": "cargui.viewDependencyDocs",
+          "when": "view == cargoTargets && viewItem == dependency",
+          "group": "1_view@2"
+        },
+        {
+          "command": "cargui.viewDependencyInCargoToml",
+          "when": "view == cargoTargets && viewItem == dependency",
+          "group": "1_view@3"
+        },
+        {
+          "command": "cargui.changeDependencyVersion",
+          "when": "view == cargoTargets && viewItem == dependency",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "cargui.copyDependencyLine",
+          "when": "view == cargoTargets && viewItem == dependency",
+          "group": "2_edit@2"
+        },
+        {
+          "command": "cargui.removeDependency",
+          "when": "view == cargoTargets && viewItem == dependency",
+          "group": "2_edit@3"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "cargui.run",
+        "key": "ctrl+k alt+1",
+        "mac": "cmd+k alt+1"
+      },
+      {
+        "command": "cargui.build",
+        "key": "ctrl+k alt+2",
+        "mac": "cmd+k alt+2"
+      },
+      {
+        "command": "cargui.check",
+        "key": "ctrl+k alt+3",
+        "mac": "cmd+k alt+3"
+      },
+      {
+        "command": "cargui.test",
+        "key": "ctrl+k alt+4",
+        "mac": "cmd+k alt+4"
+      },
+      {
+        "command": "cargui.fmt",
+        "key": "ctrl+k alt+5",
+        "mac": "cmd+k alt+5"
+      },
+      {
+        "command": "cargui.clean",
+        "key": "ctrl+k alt+6",
+        "mac": "cmd+k alt+6"
+      },
+      {
+        "command": "cargui.fix",
+        "key": "ctrl+k alt+7",
+        "mac": "cmd+k alt+7"
+      },
+      {
+        "command": "cargui.doc",
+        "key": "ctrl+k alt+8",
+        "mac": "cmd+k alt+8"
+      },
+      {
+        "command": "cargui.update",
+        "key": "ctrl+k alt+9",
+        "mac": "cmd+k alt+9"
+      },
+      {
+        "command": "cargui.deleteSelected",
+        "key": "ctrl+backspace",
+        "mac": "cmd+backspace"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.x",
+    "@typescript-eslint/parser": "^6.x",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.x",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@iarna/toml": "^2.2.5"
+  }
+}

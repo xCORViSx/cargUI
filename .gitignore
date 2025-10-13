@@ -1,2 +1,27 @@
-/target
-/vendor
+# VS Code Extension
+node_modules/
+out/
+*.vsix
+.vscode-test/
+
+# Demo Projects (for local testing)
+cargui-demo/
+cargui-demo-single/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Misc
+.env
+.env.local
