@@ -1,234 +1,274 @@
-# cargUI - Visual Cargo Interface for VS Code
+# cargUI - The Complete Rust Development Interface for VS Code
 
-A comprehensive VS Code extension that provides a graphical interface for all Cargo commands. Build, test, and manage Rust projects without typing terminal commands.
+**A comprehensive VS Code extension that transforms your Rust development workflow.** cargUI provides a unified visual interface for Cargo, Rustup, project organization, and code analysis—all accessible from your sidebar.
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue)
-![VS Code](https://img.shields.io/badge/VS%20Code-1.85.0+-green)
-![Rust](https://img.shields.io/badge/Rust-2021+-orange)
+[![VS Code Marketplace](https://img.shields.io/vscode-marketplace/v/xCORViSx.cargui.svg?label=VS%20Code%20Marketplace&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=xCORViSx.cargui)
+[![Installs](https://img.shields.io/vscode-marketplace/i/xCORViSx.cargui.svg)](https://marketplace.visualstudio.com/items?itemName=xCORViSx.cargui)
+[![Rating](https://img.shields.io/vscode-marketplace/r/xCORViSx.cargui.svg)](https://marketplace.visualstudio.com/items?itemName=xCORViSx.cargui)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## ✨ Features at a Glance
+---
 
-### Core Functionality
-- **📦 Targets** - Checkbox selection for binaries, examples, tests, benchmarks
-- **⚙️ Features** - Toggle Cargo features with checkboxes  
-- **🔧 Build Modes** - Switch between Debug/Release builds
-- **📸 Snapshots** - Save/restore entire configurations (auto-created on first load)
-- **⚡ Watch Mode** - Auto-recompile on file changes (powered by cargo-watch)
-- **📁 Workspaces** - Full multi-crate workspace support with context switching
+## 🎯 What is cargUI?
+
+cargUI started as a simple GUI for Cargo commands, but has evolved into a **complete Rust development companion** covering:
+
+- **🎨 Project Organization** - Smart detection, module visualization, target management
+- **⚙️ Cargo Integration** - Visual interface for all Cargo commands and features  
+- **🦀 Rust Toolchain** - Rustup integration and toolchain management
+- **📦 Workspace Support** - Intelligent multi-crate workspace handling
+- **🔍 Code Intelligence** - Module health indicators, dependency tracking
+- **📸 Configuration** - Snapshots for different development scenarios
 
 ### Why cargUI?
-- **No more typing** - Click instead of remembering command flags
-- **Visual state** - See what's enabled at a glance
-- **Quick switching** - Snapshots for different dev scenarios
-- **Workspace-aware** - Handles complex multi-crate projects elegantly
-- **Persistent** - Remembers your last state across VS Code restarts
+
+**Stop typing terminal commands.** Start working visually:
+
+✅ **Click** to build, run, test with precise configurations  
+✅ **See** project structure, modules, targets, and dependencies  
+✅ **Detect** unregistered files and missing declarations automatically  
+✅ **Switch** between development scenarios with snapshots  
+✅ **Track** dependency versions and module health in real-time  
+✅ **Manage** Rust toolchains without memorizing rustup commands  
+
+---
 
 ## 🚀 Quick Start
 
-1. Open any Rust project with `Cargo.toml`
-2. Find **Cargo** tree view in Explorer sidebar
-3. Check a target → Click **Build/Run/Test**
-4. Done! Terminal opens with cargo command
+1. **Install** the extension from VS Code Marketplace
+2. **Open** any Rust project with `Cargo.toml`
+3. **Find** the Cargo tree view in your Explorer sidebar
+4. **Check** a target → Click **Build/Run/Test**
 
-**Example:** Check "main" target + "serde" feature → Click Run
+**Example:** Check "main" + "serde" feature → Click Run
 ```bash
 → cargo run --bin main --features serde
 ```
 
-## 📖 Complete Feature Guide
+---
 
-### 1. Targets System
+## ✨ Feature Overview
 
-**What it does:** Automatically discovers all buildable targets in your project
+### 🏗️ Project Organization & Intelligence
 
-**Tree view shows:**
-- `src/main.rs` → Binary target
-- `src/bin/*.rs` → Additional binaries
-- `examples/*.rs` → Example programs
-- `tests/*.rs` → Integration tests  
-- `benches/*.rs` → Benchmarks
+<details>
+<summary><b>Smart Detection System</b> - Auto-discover unregistered targets and missing features</summary>
 
-**Usage:**
-- **Check targets** you want to build
-- Click **Build/Run/Test** buttons
-- Multiple targets build sequentially
-- **Toggle All** button checks/unchecks everything
+**Automatically finds:**
+- Unregistered `.rs` files anywhere in `src/`
+- `#[cfg(feature = "...")]` attributes not declared in `[features]`
+- Files that should be binaries, examples, tests, or benchmarks
 
-**Commands:**
-- Build: `cargo build --bin target1 --bin target2`
-- Run: `cargo run --bin target`
-- Test: `cargo test --test integration_test`
+**Smart filtering:**
+- Skips helper modules (checks for `mod`, `use`, `include!` statements)
+- Only shows truly orphaned files
+- No false positives from utility code
 
-### 2. Features Management
+**Interactive workflow:**
+1. Detection runs automatically (or via command palette)
+2. Classify each unknown file: Binary? Example? Test? Benchmark?
+3. Choose to move files to conventional directories
+4. One-click Cargo.toml update
 
-**What it does:** Parses `[features]` from Cargo.toml and lets you enable them
+**File organization:**
 
-**Example Cargo.toml:**
+| Target Type | Conventional Directory | Auto-Move Option |
+|-------------|------------------------|------------------|
+| Binary      | `src/bin/`            | ✅ Yes           |
+| Example     | `examples/`           | ✅ Yes           |
+| Test        | `tests/`              | ✅ Yes           |
+| Benchmark   | `benches/`            | ✅ Yes           |
+
+Follows Rust best practices automatically!
+
+</details>
+
+<details>
+<summary><b>Module Visualization</b> - See your entire module tree with health indicators</summary>
+
+**Color-coded modules:**
+
+🟢 **Green** - Well-maintained public API (documented + public)  
+🔵 **Blue** - Public modules (part of your API)  
+🟡 **Yellow** - Missing documentation  
+🟠 **Orange** - Undeclared modules (not in `mod` statements)  
+⚪ **Default** - Private internal modules with docs  
+
+**Module information:**
+- Visibility (`pub mod` vs private)
+- Documentation status (`///` or `//!` comments)
+- Test presence (`#[test]`, `#[cfg(test)]`)
+- Directory vs single-file modules
+- Hierarchical structure
+
+**Click any module to open the file instantly!**
+
+</details>
+
+<details>
+<summary><b>Dependency Management</b> - Track versions and update status</summary>
+
+**Version tracking:**
+- 🟢 Green = Latest version (up to date!)
+- 🟡 Yellow = Update available
+- 🔵 Blue = Workspace dependency  
+- 🟠 Orange = Git/path dependency
+
+**Organized by type:**
+- **Production** - Runtime dependencies
+- **Dev** - Development/testing dependencies
+- **Build** - Build script dependencies
+- **Workspace** - Shared workspace dependencies
+
+**Real-time crates.io integration** - Shows latest available versions automatically
+
+</details>
+
+---
+
+### ⚙️ Cargo Command Integration
+
+<details>
+<summary><b>Target System</b> - Visual management of all buildable targets</summary>
+
+**Auto-discovers:**
+- `src/main.rs` - Main binary
+- `src/bin/*.rs` - Additional binaries
+- `examples/*.rs` - Example programs
+- `tests/*.rs` - Integration tests
+- `benches/*.rs` - Benchmarks
+
+**Color-coded health:**
+
+🟢 **Green** - Standard location, correct declaration  
+🔵 **Blue** - Custom location (non-standard path)  
+🟠 **Orange** - Incorrect declaration (name/path mismatch)  
+🔴 **Red** - Unknown path or unregistered
+
+**Features:**
+- Multi-select for batch builds
+- Drag & drop to reclassify unknown targets
+- One-click run/build/test
+- "Toggle All" for quick selection
+
+</details>
+
+<details>
+<summary><b>Feature Flags</b> - Visual feature management</summary>
+
+Parses `[features]` from Cargo.toml:
+
 ```toml
 [features]
 default = ["json"]
 json = ["serde_json"]
 async = ["tokio"]
+database = ["sqlx"]
 ```
 
 **Usage:**
-- **Check features** to enable
+- Check features to enable
 - Combine multiple features
-- **Toggle All** for quick selection
-- Features apply to all cargo commands
+- See feature dependencies
+- Toggle all on/off
 
-**Commands:**
+**Commands use your selections:**
 ```bash
-cargo build --features json,async
+cargo build --features json,async,database
 cargo test --features json
-cargo run --features async
 ```
 
-### 3. Build Modes (Debug/Release)
+</details>
 
-**What it does:** Toggle between debug and optimized builds
+<details>
+<summary><b>Build Modes</b> - Debug/Release toggle</summary>
 
-**Click "Mode: Debug"** to switch to:
-- `Mode: Release` → Adds `--release` flag to all commands
-- Affects: build, run, test, bench, doc
+**Click "Mode: Debug"** to switch to Release:
+- Adds `--release` to all commands
+- Affects build, run, test, bench, doc
 
-**Note:** Build mode resets to Debug on VS Code restart (use snapshots to preserve release configurations)
+**Note:** Resets to Debug on VS Code restart. Use snapshots to preserve release configurations!
 
-### 4. Snapshots (Build Configurations)
+</details>
 
-**What it does:** Save complete UI state as named configuration
+<details>
+<summary><b>Snapshots</b> - Save complete build configurations</summary>
 
 **A snapshot stores:**
 - Build mode (debug/release)
 - Checked targets
 - Checked features
-- Checked arguments
-- Checked environment variables
-- Workspace context (selected member + checked members)
+- Arguments and environment variables
+- Workspace context
 
-**Default snapshots** (auto-created on first load):
-- Projects with `src/main.rs` → "main" snapshot
+**Auto-created snapshots:**
+- Binary projects → "main" snapshot
 - Library projects → "lib" snapshot
-- Workspace projects → One snapshot per member
+- Workspace projects → One per member
 
 **Workflow:**
-1. Configure UI (check targets, features, etc.)
-2. Click **[+]** in SNAPSHOTS category
-3. Enter name: "production" / "dev" / "testing"
-4. Snapshot saved
-
-**Applying snapshots:**
-- **Click snapshot** → Restores entire state
-- **Click again** → Deactivates (returns to default)
-- Active snapshot shown in bold
-
-**Editing snapshots:**
-- Right-click → **Edit**
-- Two options:
-  - Rename and keep saved state
-  - Rename and update with current UI state
+1. Configure UI (targets, features, mode)
+2. Click **[+]** in SNAPSHOTS
+3. Name it: "dev", "production", "testing"
+4. Click to apply/deactivate
 
 **Use cases:**
-```
-"dev" → debug mode, all features, verbose logging
-"production" → release mode, minimal features, optimized
-"testing" → debug mode, test targets only, test fixtures enabled
-"frontend-dev" → workspace: ui + api packages, dev features
-```
+- `dev` → debug, all features, verbose
+- `production` → release, minimal features
+- `testing` → test targets, fixtures enabled
+- `frontend-dev` → specific workspace members
 
-### 5. Arguments System
+</details>
 
-**What it does:** Reusable argument templates passed to your program (after `--`)
+<details>
+<summary><b>Watch Mode</b> - Auto-recompile on file changes</summary>
 
-**Default arguments:**
-- `--verbose`
-- `--quiet`
-- `--color always`
-- `--jobs 4`
-
-**Usage:**
-1. Click **[+]** to add new argument
-2. Enter: `--port 8080` or `--debug` or `--config ./dev.toml`
-3. **Check arguments** you want active
-4. Arguments append to cargo run/test commands
-
-**Command example:**
-```bash
-# Checked: --verbose, --port 8080
-cargo run --bin server -- --verbose --port 8080
-```
-
-**CRUD Operations:**
-- **Add** - Click [+] button
-- **Edit** - Right-click → Edit (renames argument)
-- **Remove** - Right-click → Remove (with confirmation)
-- **Reset** - Right-click category → Reset to defaults
-
-### 6. Environment Variables
-
-**What it does:** Set environment variables for cargo commands
-
-**Default variables:**
-- `RUST_BACKTRACE=1`
-- `RUST_LOG=info`
-- `CARGO_INCREMENTAL=1`
-
-**Usage:**
-1. Click **[+]** to add variable
-2. Enter in `KEY=VALUE` format: `DATABASE_URL=postgres://localhost`
-3. **Check variables** you want active
-4. Variables prepend to cargo commands
-
-**Command example:**
-```bash
-# Checked: RUST_BACKTRACE=1, RUST_LOG=debug
-RUST_BACKTRACE=1 RUST_LOG=debug cargo run
-```
-
-**Common use cases:**
-- Logging configuration (`RUST_LOG=debug`)
-- Build optimization (`CARGO_PROFILE_RELEASE_LTO=true`)
-- Test environment (`TEST_MODE=integration`)
-- API keys for integration tests
-
-### 7. Watch Mode
-
-**What it does:** Auto-recompile when files change (requires `cargo-watch`)
+**Requires:** `cargo-watch` (extension offers to install)
 
 **Watch actions:**
-- **check** - Fast compilation check (recommended for development)
-- **build** - Full build on every change
-- **run** - Run binary on every change (for servers)
-- **test** - Run tests on every change
-- **clippy** - Lint on every change
+- **check** - Fast compilation check (recommended)
+- **build** - Full build on changes
+- **run** - Run binary on changes (for servers)
+- **test** - Run tests on changes
+- **clippy** - Lint on changes
 
 **Usage:**
-1. Click **"Watch: Inactive"**
-2. Select action (e.g., "check")
-3. Watch starts in terminal
-4. Edit any `.rs` file
-5. Auto-runs: `cargo watch -x check`
+1. Click "Watch: Inactive"
+2. Select action
+3. Edit any `.rs` file
+4. Auto-runs: `cargo watch -x check`
 
-**Features:**
-- Respects checked features
-- Respects release mode
-- Respects environment variables
-- Shows in dedicated terminal
+Respects all your settings (features, env vars, etc.)!
 
-**Stop watch:**
-- Click **"Watch: Active"** 
-- Or close the watch terminal
+</details>
 
-**First-time setup:**
-- Extension detects if `cargo-watch` missing
-- Shows install prompt
-- Runs: `cargo install cargo-watch`
+---
 
-### 8. Cargo Workspaces (Multi-Crate Projects)
+### 🦀 Rust Toolchain Management
 
-**What it does:** Full support for workspace projects with multiple crates
+<details>
+<summary><b>Rustup Integration</b> - Manage toolchains visually</summary>
 
-**Workspace detection:** Automatically finds workspace members from:
+**Status bar shows:**
+- Current toolchain (stable/beta/nightly)
+- Version number
+- Click for details
+
+**No more memorizing rustup commands!**
+- See toolchain info at a glance
+- Check for updates visually
+- Switch toolchains from UI
+
+</details>
+
+---
+
+### 📦 Workspace Support
+
+<details>
+<summary><b>Multi-Crate Workspaces</b> - Full support for complex projects</summary>
+
+**Detects workspace structure:**
 ```toml
 [workspace]
 members = ["cli", "api", "core", "utils"]
@@ -236,243 +276,100 @@ members = ["cli", "api", "core", "utils"]
 
 **Two selection modes:**
 
-**A) Label Click (Context Selection):**
-- Click package name → Selects as active context
-- Tree view updates to show that package's targets/features
-- Use this when focusing on one package
+**Label Click** (Context Selection):
+- Click package name → Sets as active context
+- Tree updates to show that package's targets/features
+- Use when focusing on one crate
 
-**B) Checkbox Click (Build Selection):**
-- Check package checkbox → Include in build
-- Check multiple → Multi-package builds
-- Use this for building combinations
+**Checkbox Click** (Build Selection):
+- Check packages → Include in build
+- Multi-select for combined builds
+- Use for building multiple crates
 
-**Special "All Members" option:**
-- Click label → Runs `cargo build --workspace` (builds everything)
-- Check box → Same as checking all individual members
+**Special "All Members":**
+- Click → `cargo build --workspace` (builds everything)
+- Check → Same as checking all individually
 
-**Command examples:**
+**Commands:**
 ```bash
 # Context: core, Checked: core only
-cargo build --package core --bin core-app
+cargo build --package core
 
 # Context: api, Checked: api + core
 cargo build --package api --package core
 
-# Context: All Members (any checks ignored)
+# All Members selected
 cargo build --workspace
 ```
 
-**Workspace Snapshots:**
-Snapshots remember workspace state:
-```json
-{
-  "name": "backend-dev",
-  "workspaceMember": "api",           // ← Selected context
-  "checkedWorkspaceMembers": ["api", "core"],  // ← Build these
-  "features": ["database"],
-  "mode": "debug"
-}
+**Workspace snapshots** remember your context and selections!
+
+</details>
+
+---
+
+### 🛠️ Additional Features
+
+<details>
+<summary><b>Arguments</b> - Program arguments (after <code>--</code>)</summary>
+
+**Add reusable arguments:**
+- `--verbose`
+- `--port 8080`
+- `--config dev.toml`
+
+**Check to enable:**
+```bash
+cargo run --bin server -- --verbose --port 8080
 ```
 
-**Applying snapshot:**
-1. Selects "api" (shows api's targets/features)
-2. Checks "api" + "core" boxes
-3. Enables "database" feature
-4. Next build: `cargo build --package api --package core --features database`
+**Defaults included**, add your own via **[+]** button
 
-**Workspace UI:**
-- Category hidden for single-crate projects (auto-detects)
-- Snapshot count shows only context-relevant snapshots
-- Filtering prevents snapshot confusion
+</details>
 
-### 9. Custom Commands
+<details>
+<summary><b>Environment Variables</b> - Set env vars for cargo commands</summary>
 
-**What it does:** Save frequently-used cargo commands for one-click execution
+**Common variables:**
+- `RUST_BACKTRACE=1` - Stack traces
+- `RUST_LOG=debug` - Logging level
+- `DATABASE_URL=...` - Test database
+
+**Commands:**
+```bash
+RUST_BACKTRACE=1 RUST_LOG=debug cargo run
+```
+
+</details>
+
+<details>
+<summary><b>Custom Commands</b> - Save frequently-used cargo commands</summary>
 
 **Default commands:**
-- Clippy Lint: `cargo clippy`
-- Search Crates: `cargo search serde`
-- Add Dependency: `cargo add tokio`
-- Tree Dependencies: `cargo tree`
-- Update: `cargo update`
-- Bench: `cargo bench`
+- `cargo clippy` - Lint
+- `cargo search <crate>` - Search crates
+- `cargo add <crate>` - Add dependency
+- `cargo tree` - Dependency tree
+- `cargo update` - Update dependencies
 
-**Usage:**
-1. Click **[+]** in Custom Commands
-2. Enter name: "Update All"
-3. Enter command: `cargo update`
-4. Click command to execute in terminal
-
-**Advanced examples:**
+**Add your own:**
 ```bash
-# Cross-compilation
-cargo build --target x86_64-unknown-linux-gnu --release
-
-# Specific test with nocapture
-cargo test my_test -- --nocapture
-
-# Documentation with private items
-cargo doc --no-deps --document-private-items --open
-
-# Show outdated dependencies (requires cargo-outdated)
-cargo outdated
-
-# Security audit (requires cargo-audit)
-cargo audit
+cargo build --target x86_64-unknown-linux-gnu
+cargo test --nocapture
+cargo doc --document-private-items --open
 ```
 
-### 10. Standard Cargo Commands
+Click to execute in terminal!
 
-**Always available via buttons:**
-- **Build** - `cargo build [targets] [features]`
-- **Run** - `cargo run [target] [features] [-- args]`
-- **Test** - `cargo test [targets] [features]`
-- **Check** - `cargo check [targets] [features]`
-- **Clean** - `cargo clean`
-- **Fix** - `cargo fix` (automatically fixes compiler warnings)
-- **Format** - `cargo fmt`
-- **Doc** - `cargo doc [features]`
+</details>
 
-All commands respect:
-- Current build mode (debug/release)
-- Checked targets
-- Checked features  
-- Checked arguments (for run/test)
-- Checked environment variables
-- Workspace context
-
-### 11. Smart Detection (NEW! 🎉)
-
-**What it does:** Automatically finds unregistered .rs files and undeclared feature flags, helping you organize them according to Cargo conventions
-
-**Detection triggers:**
-- When workspace opens
-- When Cargo.toml changes
-- When .rs files are added/modified
-- When tree view refreshes
-
-**What it detects:**
-
-**Stray .rs files:**
-- **Scans entire `src/` directory recursively** for any `.rs` files
-- Excludes registered targets (main.rs, lib.rs, [[bin]], [[example]], etc.)
-- **Automatically skips referenced modules** - checks for `mod`, `use`, and `include!` statements
-- Only shows files that are truly unregistered and unreferenced
-- Asks you what type each file should be: binary, example, test, or benchmark
-- **Offers to move files to conventional directories** (src/bin/, examples/, tests/, benches/)
-
-**Undeclared features:**
-- `#[cfg(feature = "name")]` attributes in code
-- Features used but not declared in `[features]` section
-- Scans all `.rs` files in src/, tests/, benches/, examples/
-
-**Interactive workflow:**
-1. Detection runs automatically (2-second debounce)
-2. For stray .rs files: "What type of target is 'stray_file' (src/stray_file.rs)?"
-   - Choose: Binary, Example, Test, Benchmark, or Skip
-3. After resolving types: "Move showcase_example.rs to examples/ directory?"
-   - Choose: Move to conventional directory or Keep in current location
-4. Shows summary: "Found 2 unregistered targets and 3 undeclared features. Configure them?"
-5. Click **Configure** → QuickPick UI opens with all items
-6. Select items to add (all pre-selected)
-7. Click apply → Files moved (if requested) and Cargo.toml updated automatically
-
-**File organization actions:**
-
-When you configure a target, the extension offers to move it to the standard Cargo directory:
-
-| Target Type | Conventional Directory | Action |
-|-------------|------------------------|--------|
-| Binary      | `src/bin/`            | Moves file and updates path in Cargo.toml |
-| Example     | `examples/`           | Moves file and updates path in Cargo.toml |
-| Test        | `tests/`              | Moves file and updates path in Cargo.toml |
-| Benchmark   | `benches/`            | Moves file and updates path in Cargo.toml |
-
-**Benefits of moving:**
-- ✅ Follows Rust best practices and conventions
-- ✅ Makes project structure immediately clear to other developers
-- ✅ Keeps src/ clean and focused on library/binary code
-- ✅ Automatic path updates ensure Cargo.toml stays in sync
-- ✅ Creates target directories if they don't exist
-
-**Options:**
-- **Configure** - Opens interactive selection UI
-- **Ignore** - Dismiss notification (will show again later)
-- **Don't Show Again** - Permanently disable for this workspace
-- **Skip** - For individual files you want to leave unregistered
-
-**Example detection:**
-```rust
-// src/showcase_example.rs (found anywhere in src/)
-// Smart detection will ask: "What type should this be?" → Example
-// Then ask: "Move to examples/ directory?" → Yes
-#[cfg(feature = "showcase")]  // ← also detected as undeclared
-fn main() {
-    println!("Example program!");
-}
-```
-
-**After configuration (with move):**
-
-File moved from `src/showcase_example.rs` to `examples/showcase_example.rs`
-
-```toml
-[[example]]
-name = "showcase-example"
-path = "examples/showcase_example.rs"
-
-[features]
-showcase = []
-```
-
-**Why this is useful:**
-- Catch forgotten module files that should be targets
-- Organize files according to Cargo conventions automatically
-- Keep your project structure clean and maintainable
-- **Automatically ignores helper modules** - no false positives from utility code
-
-**How module detection works:**
-The extension scans all `.rs` files looking for references:
-- `mod helper_module;` - Module declarations
-- `use crate::utils::helper;` - Use statements
-- `include!("constants.rs")` - Include macros
-
-If a file is referenced by any of these, it's automatically excluded from detection. This means:
-- ✅ Helper modules used by your code: **ignored**
-- ✅ Utility files imported elsewhere: **ignored**
-- ✅ Shared constants/types: **ignored**
-- ⚠️ Standalone executables with `main()`: **detected**
-- ⚠️ Orphaned test/benchmark files: **detected**
-
-**Workspace support:**
-- Detects across all workspace members
-- Groups items by member in UI
-- Updates correct Cargo.toml for each member
-
-## 📦 Installation
-
-### From Marketplace
-
-1. Open VS Code
-2. Go to Extensions (Cmd+Shift+X)
-3. Search "cargUI"
-4. Click Install
-
-### From Source
-
-```bash
-git clone <repository-url>
-cd Cargui
-npm install
-npm run compile
-# Press F5 in VS Code to launch extension development host
-```
+---
 
 ## ⌨️ Keyboard Shortcuts
 
-**macOS:**
+### macOS
 - `Cmd+K Alt+1` - Run
-- `Cmd+K Alt+2` - Build
+- `Cmd+K Alt+2` - Build  
 - `Cmd+K Alt+3` - Check
 - `Cmd+K Alt+4` - Test
 - `Cmd+K Alt+5` - Format (rustfmt)
@@ -480,271 +377,297 @@ npm run compile
 - `Cmd+K Alt+7` - Fix (cargo fix)
 - `Cmd+K Alt+8` - Doc
 - `Cmd+K Alt+9` - Update
-- `Cmd+Delete` - Delete selected item (arguments, env vars, snapshots, custom commands)
+- `Cmd+Delete` - Delete selected item
 
-**Windows/Linux:**
-- `Ctrl+K Alt+1` through `Ctrl+K Alt+9` - Same commands as above
+### Windows/Linux  
+- `Ctrl+K Alt+1-9` - Same as macOS
 - `Ctrl+Delete` - Delete selected item
+
+---
 
 ## 🎓 Common Workflows
 
-### Single Package Development
+### Single Crate Development
 
-**Scenario:** Working on a binary with feature flags
-
+```
 1. Check "main" target
-2. Check "database" and "logging" features
+2. Enable "database" and "logging" features
 3. Set mode to Debug
 4. Click Run
 5. Save as "dev" snapshot
+```
 
 **Result:** `cargo run --bin main --features database,logging`
 
-### Workspace Development
+### Multi-Crate Workspace
 
-**Scenario:** Multi-crate project, focusing on API package
-
-1. Click "api" label (select context - see api's targets)
-2. Check "api" checkbox (include in build)
-3. Check "shared" checkbox (build dependency too)
-4. Check features you need
-5. Click Build
+```
+1. Click "api" label (set context)
+2. Check "api" + "shared" checkboxes
+3. Enable features
+4. Click Build
+```
 
 **Result:** `cargo build --package api --package shared --features ...`
 
-### Testing Workflow
+### Testing with Logging
 
-**Scenario:** Run specific integration test with logging
-
-1. Check test target: `integration_tests`
-2. Add env var: `RUST_LOG=debug`
+```
+1. Check test: "integration_tests"
+2. Add env var: RUST_LOG=debug
 3. Check the env var
 4. Click Test
+```
 
 **Result:** `RUST_LOG=debug cargo test --test integration_tests`
 
 ### Watch Mode Development
 
-**Scenario:** Fast feedback loop while coding
-
+```
 1. Check your main target
 2. Click "Watch: Inactive"
-3. Select "check" action
-4. Edit code
-5. Instant compilation feedback in terminal
-
-**Result:** `cargo watch -x check` (runs automatically on save)
-
-## 🔧 Configuration
-
-All settings auto-initialize on first load. Stored in workspace `.vscode/settings.json`:
-
-```json
-{
-  "cargui.arguments": [
-    "--verbose",
-    "--quiet"
-  ],
-  "cargui.environmentVariables": [
-    "RUST_BACKTRACE=1"
-  ],
-  "cargui.snapshots": [
-    {
-      "name": "main",
-      "mode": "debug",
-      "targets": ["main"],
-      "features": [],
-      "workspaceMember": "core"
-    }
-  ],
-  "cargui.customCommands": [
-    {
-      "name": "Update All",
-      "command": "cargo update"
-    }
-  ],
-  "cargui.activeSnapshot": "main"
-}
+3. Select "check"
+4. Edit code → instant feedback!
 ```
 
-**State Persistence:**
+---
 
-- ✅ Snapshots persist (stored in settings.json)
-- ✅ Active snapshot persists (last applied snapshot)
-- ✅ Checked states persist within extension session
-- ❌ Build mode does NOT persist (resets to Debug on restart)
-- ❌ Workspace selection does NOT persist (resets on restart)
-- ❌ Individual checkbox states don't persist across restarts
+## 📦 Installation
 
-**💡 Tip:** Use snapshots to save your preferred configurations, including build mode and workspace context.
+### From VS Code Marketplace
 
-**Philosophy:** Snapshots are the persistence mechanism. Configure your common states as snapshots, then quick-toggle between them.
+1. Open VS Code
+2. Go to Extensions (`Cmd+Shift+X`)
+3. Search "cargUI"
+4. Click Install
 
-## 🎨 UI Tree Structure
+### From Source
+
+```bash
+git clone https://github.com/xCORViSx/cargUI.git
+cd cargUI
+npm install
+npm run compile
+# Press F5 to launch Extension Development Host
+```
+
+---
+
+## 🎨 Tree View Structure
 
 ```
 📂 Cargo
-├── 🔧 Mode: Debug                    [Click to toggle]
-├── ⚡ Watch: Inactive                [Click to configure]
+├── 🔧 Mode: Debug                [Click to toggle]
+├── ⚡ Watch: Inactive            [Click to configure]
+├── 🦀 Rust: stable 1.75.0       [Rustup status]
 │
-├── 📁 WORKSPACE MEMBERS              [Only shows if multi-crate]
-│   ├── All Members                   [Click: build --workspace]
-│   ├── ☑ api ✓ Selected             [Label: context | Checkbox: include in build]
-│   ├── ☐ core                        [...]
-│   └── ☐ utils                       [...]
+├── 📁 WORKSPACE MEMBERS          [Multi-crate only]
+│   ├── All Members               [Click: --workspace]
+│   ├── ☑ api ✓ Selected         [Label=context | Box=build]
+│   └── ☐ core
 │
-├── 📸 SNAPSHOTS (main)               [Active snapshot name]
-│   ├── ★ main                        [Bold if active, click to apply/deactivate]
-│   ├── dev                           [...]
-│   └── production                    [...] [Right-click for edit/delete]
-│       [+] Create   [↻] Reset
+├── 🗂️ MODULES                   [Code structure]
+│   ├── 🟢 auth (pub)            [Public, documented]
+│   ├── 🔵 api (pub)             [Public]
+│   ├── 🟡 utils                 [Missing docs]
+│   └── 🟠 helper                [Undeclared]
+│
+├── 📦 DEPENDENCIES               [Version tracking]
+│   ├── Production
+│   │   ├── 🟢 serde 1.0.195    [Latest]
+│   │   └── 🟡 tokio 1.35.0     [1.36.0 available]
+│   └── Dev
+│       └── 🔵 criterion 0.5.1   [Local]
+│
+├── 📸 SNAPSHOTS (dev)            [Active: dev]
+│   ├── ★ dev                    [Bold=active]
+│   └── production
+│       [+] Create  [↻] Reset
 │
 ├── 📦 TARGETS
-│   ├── ☑ main                        [Click checkbox or label to toggle]
-│   ├── ☐ cli-tool                    [...]
-│   └── ☐ server                      [...]
+│   ├── Binaries
+│   │   ├── ☑ main
+│   │   └── ☐ cli-tool
+│   ├── Examples
+│   ├── Tests
+│   └── ⚠️ Unknowns (2)         [Need classification]
+│       ├── 🔴 stray_file
+│       └── 🔴 old_test
 │       [Toggle All]
 │
 ├── ⚙️ FEATURES
-│   ├── ☑ json                        [...]
-│   ├── ☐ async                       [...]
-│   └── ☐ database                    [...]
+│   ├── ☑ json
+│   ├── ☐ async
+│   └── ☐ database
 │       [Toggle All]
 │
 ├── 🔧 ARGUMENTS
-│   ├── ☑ --verbose                   [Program arguments (after --)]
-│   └── ☐ --port 8080                 [...]
-│       [+] Add   [↻] Reset
+│   ├── ☑ --verbose
+│   └── ☐ --port 8080
+│       [+] Add  [↻] Reset
 │
 ├── 🌍 ENVIRONMENT VARIABLES
-│   ├── ☑ RUST_BACKTRACE=1           [...]
-│   └── ☐ RUST_LOG=debug             [...]
-│       [+] Add   [↻] Reset
+│   ├── ☑ RUST_BACKTRACE=1
+│   └── ☐ RUST_LOG=debug
+│       [+] Add  [↻] Reset
 │
 └── 🖥️ CUSTOM COMMANDS
-    ├── Search Crates                 [Click to run]
-    ├── Add Dependency                [...]
-    └── Tree Dependencies             [...]
-        [+] Add   [↻] Reset
+    ├── Clippy Lint
+    ├── Update All
+    └── Tree Dependencies
+        [+] Add  [↻] Reset
 
-[Build] [Run] [Test] [Check] [Clean] [Clippy] [Fmt] [Doc]
+[Build] [Run] [Test] [Check] [Clean] [Fix] [Fmt] [Doc]
 ```
+
+---
+
+## 🔧 Configuration
+
+Settings auto-initialize in `.vscode/settings.json`:
+
+```json
+{
+  "cargui.arguments": ["--verbose"],
+  "cargui.environmentVariables": ["RUST_BACKTRACE=1"],
+  "cargui.snapshots": [
+    {
+      "name": "dev",
+      "mode": "debug",
+      "targets": ["main"],
+      "features": ["json", "async"]
+    }
+  ],
+  "cargui.customCommands": [
+    { "name": "Clippy", "command": "cargo clippy" }
+  ]
+}
+```
+
+**Persistence:**
+- ✅ Snapshots persist
+- ✅ Active snapshot persists
+- ❌ Build mode resets to Debug (use snapshots!)
+- ❌ Individual checkboxes don't persist
+
+💡 **Tip:** Use snapshots as your persistence mechanism!
+
+---
 
 ## 🐛 Troubleshooting
 
-**Q: Extension doesn't appear in sidebar**  
-A: Ensure you're in a Rust project with `Cargo.toml` in workspace root
+**Q: Extension doesn't appear**  
+A: Open a Rust project with `Cargo.toml`
 
 **Q: Targets not showing**  
-A: Check that your `Cargo.toml` has proper `[[bin]]`, `[[example]]` sections or files in standard locations
+A: Check `Cargo.toml` for `[[bin]]`, `[[example]]` sections
 
 **Q: Watch mode fails**  
 A: Install cargo-watch: `cargo install cargo-watch`
 
-**Q: Workspace members not detected**  
-A: Verify `[workspace]` section in root `Cargo.toml` with `members = [...]`
+**Q: Modules not detected**  
+A: Ensure `src/lib.rs` or `src/main.rs` exists
 
-**Q: Snapshots from different workspace showing**  
-A: Fixed in v0.2.0 - snapshots now filter by workspace context
+**Q: Dependencies not updating**  
+A: Refresh the tree view (click refresh icon)
 
-**Q: Features not discovered**  
-A: Ensure `[features]` section exists in `Cargo.toml`
-
-## 📚 Documentation
-
-- **TESTING.md** - Manual testing guide for all features
-- **WORKSPACE.md** - Comprehensive workspace feature documentation
-- **cargui-demo/** - Example multi-crate workspace for testing
+---
 
 ## 🤝 Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Development Setup
 
 ```bash
-git clone <repo>
-cd Cargui
+git clone https://github.com/xCORViSx/cargUI.git
+cd cargUI
 npm install
-npm run watch    # Auto-compile on changes
-# Press F5 to launch Extension Development Host
+npm run watch    # Auto-compile
+# Press F5 to test
 ```
 
 ### Project Structure
 
 ```
-Cargui/
+cargUI/
 ├── src/
-│   └── extension.ts          # Main extension (2500+ lines)
-├── cargui-demo/              # Test workspace (4 crates)
-│   ├── crates/
-│   │   ├── api-service/
-│   │   ├── core-lib/
-│   │   ├── demo-project/
-│   │   └── utils/
-│   └── Cargo.toml            # Workspace root
-├── package.json              # Extension manifest
-├── tsconfig.json
-└── README.md
+│   ├── extension.ts              # Main entry point
+│   ├── cargoTreeProvider.ts      # Tree view provider
+│   ├── smartDetection.ts         # Smart detection
+│   ├── moduleDetection.ts        # Module analysis
+│   ├── cargoDiscovery.ts         # Target discovery
+│   ├── cratesIo.ts              # Version checking
+│   └── ... (15+ focused modules)
+├── cargui-demo/                  # Test workspace
+└── package.json
 ```
+
+---
 
 ## 🚀 Roadmap
 
-- [x] Smart detection for unregistered targets and undeclared features
+- [x] Smart detection for unregistered targets
+- [x] Module visualization with health indicators
+- [x] Dependency version tracking
+- [x] Rustup integration
 - [ ] Visual Cargo.toml editor
 - [ ] Dependency graph visualization
 - [ ] Cross-compilation target selector
 - [ ] Benchmark comparison runner
 - [ ] Profile-guided optimization helper
+- [ ] Inline cargo command builder
 
-## 🔔 Release Notes
+---
 
-### v0.3.0 - Smart Detection (Current)
-- ✅ **Smart Detection System** - Automatically detects unregistered .rs files and undeclared features
-- ✅ Finds binaries in `src/bin/` not registered in `[[bin]]` sections
-- ✅ Scans code for `#[cfg(feature = "...")]` attributes not declared in `[features]`
-- ✅ Interactive configuration UI with multi-select
-- ✅ One-click Cargo.toml modification
-- ✅ Workspace-aware detection across all members
-- ✅ "Don't Show Again" option with workspace storage
-- ✅ Automatic detection on file changes (debounced)
+## 📝 Release Notes
 
-### v0.2.0 - Workspace Support
-- ✅ Full Cargo workspace support
-- ✅ Multi-package build selection
-- ✅ Workspace-aware snapshots with filtering
+### v0.2.0 - Current
+
+**🎨 Project Organization:**
+- ✅ Smart Detection for unregistered targets and undeclared features
+- ✅ Module visualization with color-coded health indicators
+- ✅ Dependency version tracking with crates.io integration
+- ✅ File organization with auto-move to conventional directories
+- ✅ Intelligent module filtering (no false positives)
+
+**⚙️ Cargo & Rust:**
+- ✅ Full workspace support with context switching
+- ✅ Rustup integration (toolchain display)
+- ✅ Target color coding for health status
+- ✅ Drag & drop target reclassification
 - ✅ Auto-created default snapshots
-- ✅ Context-aware target/feature discovery
-- ✅ Generic snapshot naming ("main"/"lib")
-- ✅ Conditional UI (hides workspace category for single projects)
+
+**🔧 Improvements:**
+- ✅ Workspace-aware detection across members
+- ✅ One-click Cargo.toml updates
+- ✅ Enhanced tooltips with rich information
+- ✅ Better icon system (context-aware)
 
 ### v0.1.0 - Initial Release
-- ✅ Target discovery and checkbox selection
-- ✅ Feature management
-- ✅ Snapshots system
-- ✅ Watch mode integration
-- ✅ Arguments and environment variables
-- ✅ Custom commands
+- Target discovery and management
+- Feature flag toggles
+- Snapshots system
+- Watch mode integration
+- Custom commands
+
+---
 
 ## 📄 License
 
-MIT License - See LICENSE file
+MIT License - See [LICENSE](LICENSE) file
 
-## 👏 Acknowledgments
-
-Built with:
-- **VS Code Extension API** - Extension framework
-- **@iarna/toml** - Cargo.toml parsing
-- **TypeScript** - Type-safe development
-- **cargo-watch** - File watching functionality
+---
 
 ## 🔗 Links
 
-- [GitHub Repository](#)
-- [VS Code Marketplace](#)
-- [Issue Tracker](#)
-- [Changelog](#)
+- [GitHub Repository](https://github.com/xCORViSx/cargUI)
+- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=xCORViSx.cargui)
+- [Issue Tracker](https://github.com/xCORViSx/cargUI/issues)
+- [Contributing Guide](CONTRIBUTING.md)
 
 ---
 
 **Made with ❤️ for the Rust community**
 
-*Simplifying Cargo workflows, one checkbox at a time.*
+*From simple cargo commands to complete Rust development—all in your sidebar.*
