@@ -7,6 +7,7 @@ out/
 # Demo Projects (for local testing)
 cargui-demo/
 cargui-demo-single/
+cacao/
 
 # OS
 .DS_Store
