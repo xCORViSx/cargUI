@@ -132,11 +132,19 @@ Follows Rust best practices automatically!
 <summary><b>Target System</b> - Visual management of all buildable targets</summary>
 
 **Auto-discovers:**
-- `src/main.rs` - Main binary
+- `src/lib.rs` - Library target ⭐
+- `src/main.rs` - Main binary ⭐
 - `src/bin/*.rs` - Additional binaries
 - `examples/*.rs` - Example programs
 - `tests/*.rs` - Integration tests
 - `benches/*.rs` - Benchmarks
+- `[lib]` section in Cargo.toml - Custom library configurations
+
+**Primary targets (⭐):**
+- Main binary (`src/main.rs`) and library (`src/lib.rs`) targets are marked with a star icon
+- Auto-selected when no targets are checked
+- Keyboard shortcuts work with library-only crates!
+- Both receive identical special treatment and features
 
 **Color-coded health:**
 
@@ -147,8 +155,9 @@ Follows Rust best practices automatically!
 **Features:**
 - Multi-select for batch builds
 - Drag & drop to reclassify unknown targets
-- One-click run/build/test
+- One-click run/build/test/doc
 - "Toggle All" for quick selection
+- Library target support for `cargo build --lib`, `cargo test --lib`, `cargo doc --lib`
 
 </details>
 
@@ -201,8 +210,9 @@ cargo test --features json
 - Workspace context
 
 **Auto-created snapshots:**
-- Binary projects → "main" snapshot
-- Library projects → "lib" snapshot
+- Binary projects (with `src/main.rs`) → "main" snapshot
+- Library projects (with `src/lib.rs`) → "lib" snapshot
+- Mixed projects (both) → Both snapshots created
 - Workspace projects → One per member
 
 **Workflow:**
@@ -388,6 +398,8 @@ Click to execute in terminal!
 ---
 
 ## ⌨️ Keyboard Shortcuts
+
+**Works with both binary and library targets!** If no target is checked, shortcuts automatically use `src/main.rs` or `src/lib.rs`.
 
 ### macOS
 - `Cmd+K Alt+1` - Run
