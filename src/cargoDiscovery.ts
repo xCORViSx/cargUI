@@ -131,10 +131,23 @@ export function discoverCargoTargets(workspacePath: string, memberPath?: string)
         if (manifest.bin && Array.isArray(manifest.bin)) {
             for (const bin of manifest.bin) {
                 if (bin.name) {
+                    // If no path specified, infer standard location
+                    let binPath = bin.path;
+                    if (!binPath) {
+                        // Check for directory-based binary first (src/bin/{name}/main.rs)
+                        const dirPath = path.join(basePath, 'src', 'bin', bin.name, 'main.rs');
+                        if (fs.existsSync(dirPath)) {
+                            binPath = `src/bin/${bin.name}/main.rs`;
+                        } else {
+                            // Default to single-file binary (src/bin/{name}.rs)
+                            binPath = `src/bin/${bin.name}.rs`;
+                        }
+                    }
                     targets.push({
                         name: bin.name,
                         type: 'bin',
-                        path: bin.path
+                        path: binPath,
+                        requiredFeatures: (bin as any)['required-features']
                     });
                 }
             }
@@ -144,10 +157,23 @@ export function discoverCargoTargets(workspacePath: string, memberPath?: string)
         if (manifest.example && Array.isArray(manifest.example)) {
             for (const example of manifest.example) {
                 if (example.name) {
+                    // If no path specified, infer standard location
+                    let examplePath = example.path;
+                    if (!examplePath) {
+                        // Check for directory-based example first (examples/{name}/main.rs)
+                        const dirPath = path.join(basePath, 'examples', example.name, 'main.rs');
+                        if (fs.existsSync(dirPath)) {
+                            examplePath = `examples/${example.name}/main.rs`;
+                        } else {
+                            // Default to single-file example (examples/{name}.rs)
+                            examplePath = `examples/${example.name}.rs`;
+                        }
+                    }
                     targets.push({
                         name: example.name,
                         type: 'example',
-                        path: example.path
+                        path: examplePath,
+                        requiredFeatures: (example as any)['required-features']
                     });
                 }
             }
@@ -178,10 +204,23 @@ export function discoverCargoTargets(workspacePath: string, memberPath?: string)
         if (manifest.test && Array.isArray(manifest.test)) {
             for (const test of manifest.test) {
                 if (test.name) {
+                    // If no path specified, infer standard location
+                    let testPath = test.path;
+                    if (!testPath) {
+                        // Check for directory-based test first (tests/{name}/main.rs)
+                        const dirPath = path.join(basePath, 'tests', test.name, 'main.rs');
+                        if (fs.existsSync(dirPath)) {
+                            testPath = `tests/${test.name}/main.rs`;
+                        } else {
+                            // Default to single-file test (tests/{name}.rs)
+                            testPath = `tests/${test.name}.rs`;
+                        }
+                    }
                     targets.push({
                         name: test.name,
                         type: 'test',
-                        path: test.path
+                        path: testPath,
+                        requiredFeatures: (test as any)['required-features']
                     });
                 }
             }
@@ -212,10 +251,23 @@ export function discoverCargoTargets(workspacePath: string, memberPath?: string)
         if (manifest.bench && Array.isArray(manifest.bench)) {
             for (const bench of manifest.bench) {
                 if (bench.name) {
+                    // If no path specified, infer standard location
+                    let benchPath = bench.path;
+                    if (!benchPath) {
+                        // Check for directory-based bench first (benches/{name}/main.rs)
+                        const dirPath = path.join(basePath, 'benches', bench.name, 'main.rs');
+                        if (fs.existsSync(dirPath)) {
+                            benchPath = `benches/${bench.name}/main.rs`;
+                        } else {
+                            // Default to single-file bench (benches/{name}.rs)
+                            benchPath = `benches/${bench.name}.rs`;
+                        }
+                    }
                     targets.push({
                         name: bench.name,
                         type: 'bench',
-                        path: bench.path
+                        path: benchPath,
+                        requiredFeatures: (bench as any)['required-features']
                     });
                 }
             }

@@ -33,6 +33,15 @@ export function detectUnregisteredTargets(workspacePath: string, memberPath?: st
             for (const bin of manifest.bin) {
                 if (bin.path) {
                     registeredPaths.add(bin.path);
+                } else if (bin.name) {
+                    // When no path is specified, Cargo looks for src/bin/{name}.rs or src/bin/{name}/main.rs
+                    // Normalize both hyphen and underscore variants since Rust treats them as equivalent
+                    const nameWithHyphen = bin.name.replace(/_/g, '-');
+                    const nameWithUnderscore = bin.name.replace(/-/g, '_');
+                    registeredPaths.add(`src/bin/${nameWithHyphen}.rs`);
+                    registeredPaths.add(`src/bin/${nameWithUnderscore}.rs`);
+                    registeredPaths.add(`src/bin/${nameWithHyphen}/main.rs`);
+                    registeredPaths.add(`src/bin/${nameWithUnderscore}/main.rs`);
                 }
             }
         }
@@ -41,16 +50,33 @@ export function detectUnregisteredTargets(workspacePath: string, memberPath?: st
             for (const example of manifest.example) {
                 if (example.path) {
                     registeredPaths.add(example.path);
+                } else if (example.name) {
+                    // When no path is specified, Cargo looks for:
+                    // 1. examples/{name}.rs OR
+                    // 2. examples/{name}/main.rs
+                    // Normalize both hyphen and underscore variants since Rust treats them as equivalent
+                    const nameWithHyphen = example.name.replace(/_/g, '-');
+                    const nameWithUnderscore = example.name.replace(/-/g, '_');
+                    registeredPaths.add(`examples/${nameWithHyphen}.rs`);
+                    registeredPaths.add(`examples/${nameWithUnderscore}.rs`);
+                    registeredPaths.add(`examples/${nameWithHyphen}/main.rs`);
+                    registeredPaths.add(`examples/${nameWithUnderscore}/main.rs`);
                 }
             }
         }
 
         const examplesDir = path.join(basePath, 'examples');
         if (fs.existsSync(examplesDir)) {
-            const files = fs.readdirSync(examplesDir);
-            for (const file of files) {
-                if (file.endsWith('.rs')) {
-                    registeredPaths.add(`examples/${file}`);
+            const items = fs.readdirSync(examplesDir, { withFileTypes: true });
+            for (const item of items) {
+                if (item.isFile() && item.name.endsWith('.rs')) {
+                    registeredPaths.add(`examples/${item.name}`);
+                } else if (item.isDirectory()) {
+                    // Check for main.rs in subdirectory (e.g., examples/browser/main.rs)
+                    const mainPath = path.join(examplesDir, item.name, 'main.rs');
+                    if (fs.existsSync(mainPath)) {
+                        registeredPaths.add(`examples/${item.name}/main.rs`);
+                    }
                 }
             }
         }
@@ -59,16 +85,31 @@ export function detectUnregisteredTargets(workspacePath: string, memberPath?: st
             for (const test of manifest.test) {
                 if (test.path) {
                     registeredPaths.add(test.path);
+                } else if (test.name) {
+                    // When no path is specified, Cargo looks for tests/{name}.rs or tests/{name}/main.rs
+                    // Normalize both hyphen and underscore variants since Rust treats them as equivalent
+                    const nameWithHyphen = test.name.replace(/_/g, '-');
+                    const nameWithUnderscore = test.name.replace(/-/g, '_');
+                    registeredPaths.add(`tests/${nameWithHyphen}.rs`);
+                    registeredPaths.add(`tests/${nameWithUnderscore}.rs`);
+                    registeredPaths.add(`tests/${nameWithHyphen}/main.rs`);
+                    registeredPaths.add(`tests/${nameWithUnderscore}/main.rs`);
                 }
             }
         }
 
         const testsDir = path.join(basePath, 'tests');
         if (fs.existsSync(testsDir)) {
-            const files = fs.readdirSync(testsDir);
-            for (const file of files) {
-                if (file.endsWith('.rs')) {
-                    registeredPaths.add(`tests/${file}`);
+            const items = fs.readdirSync(testsDir, { withFileTypes: true });
+            for (const item of items) {
+                if (item.isFile() && item.name.endsWith('.rs')) {
+                    registeredPaths.add(`tests/${item.name}`);
+                } else if (item.isDirectory()) {
+                    // Check for main.rs in subdirectory (e.g., tests/integration/main.rs)
+                    const mainPath = path.join(testsDir, item.name, 'main.rs');
+                    if (fs.existsSync(mainPath)) {
+                        registeredPaths.add(`tests/${item.name}/main.rs`);
+                    }
                 }
             }
         }
@@ -77,16 +118,31 @@ export function detectUnregisteredTargets(workspacePath: string, memberPath?: st
             for (const bench of manifest.bench) {
                 if (bench.path) {
                     registeredPaths.add(bench.path);
+                } else if (bench.name) {
+                    // When no path is specified, Cargo looks for benches/{name}.rs or benches/{name}/main.rs
+                    // Normalize both hyphen and underscore variants since Rust treats them as equivalent
+                    const nameWithHyphen = bench.name.replace(/_/g, '-');
+                    const nameWithUnderscore = bench.name.replace(/-/g, '_');
+                    registeredPaths.add(`benches/${nameWithHyphen}.rs`);
+                    registeredPaths.add(`benches/${nameWithUnderscore}.rs`);
+                    registeredPaths.add(`benches/${nameWithHyphen}/main.rs`);
+                    registeredPaths.add(`benches/${nameWithUnderscore}/main.rs`);
                 }
             }
         }
 
         const benchesDir = path.join(basePath, 'benches');
         if (fs.existsSync(benchesDir)) {
-            const files = fs.readdirSync(benchesDir);
-            for (const file of files) {
-                if (file.endsWith('.rs')) {
-                    registeredPaths.add(`benches/${file}`);
+            const items = fs.readdirSync(benchesDir, { withFileTypes: true });
+            for (const item of items) {
+                if (item.isFile() && item.name.endsWith('.rs')) {
+                    registeredPaths.add(`benches/${item.name}`);
+                } else if (item.isDirectory()) {
+                    // Check for main.rs in subdirectory (e.g., benches/benchmark/main.rs)
+                    const mainPath = path.join(benchesDir, item.name, 'main.rs');
+                    if (fs.existsSync(mainPath)) {
+                        registeredPaths.add(`benches/${item.name}/main.rs`);
+                    }
                 }
             }
         }
@@ -263,10 +319,15 @@ export function detectUndeclaredFeatures(workspacePath: string, memberPath?: str
         const cargoTomlContent = fs.readFileSync(cargoTomlPath, 'utf-8');
         const manifest = toml.parse(cargoTomlContent) as CargoManifest;
 
+        // Normalize feature names to handle hyphen/underscore equivalence
+        // Store both variants for each declared feature
         const declaredFeatures = new Set<string>();
         if (manifest.features) {
             for (const key of Object.keys(manifest.features)) {
                 declaredFeatures.add(key);
+                // Add normalized variant (hyphens to underscores and vice versa)
+                declaredFeatures.add(key.replace(/-/g, '_'));
+                declaredFeatures.add(key.replace(/_/g, '-'));
             }
         }
 
@@ -304,6 +365,7 @@ export function detectUndeclaredFeatures(workspacePath: string, memberPath?: str
         scanDirectory(path.join(basePath, 'examples'));
 
         for (const feature of usedFeatures) {
+            // Check if feature is declared (accounting for hyphen/underscore equivalence)
             if (!declaredFeatures.has(feature)) {
                 undeclared.push({
                     name: feature,

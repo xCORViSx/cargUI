@@ -2,7 +2,7 @@
   "name": "cargUI",
   "displayName": "cargUI",
   "description": "Native VSCode UI for Rust projects!",
-  "version": "0.2.2",
+  "version": "1.0.0",
   "publisher": "xCORViSx",
   "icon": "cargui-icon.png",
   "repository": {
@@ -178,10 +178,6 @@
               "command": "cargo search serde"
             },
             {
-              "name": "Add Dependency",
-              "command": "cargo add tokio"
-            },
-            {
               "name": "Tree Dependencies",
               "command": "cargo tree"
             },
@@ -192,6 +188,10 @@
             {
               "name": "Expand Macros",
               "command": "cargo expand"
+            },
+            {
+              "name": "Show Bench Results",
+              "command": "cargo bench --no-run"
             }
           ],
           "description": "Custom cargo commands that can be run with a single click.",
@@ -205,6 +205,37 @@
               "command": {
                 "type": "string",
                 "description": "Full cargo command to execute (with 'cargo' prefix)"
+              }
+            }
+          }
+        },
+        "cargui.customCommandCategories": {
+          "type": "array",
+          "default": [],
+          "description": "Custom cargo command categories with commands organized by category.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Category name"
+              },
+              "commands": {
+                "type": "array",
+                "description": "Commands in this category",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Display name for the custom command"
+                    },
+                    "command": {
+                      "type": "string",
+                      "description": "Full cargo command to execute (with 'cargo' prefix)"
+                    }
+                  }
+                }
               }
             }
           }
@@ -441,6 +472,54 @@
         "icon": "$(play)"
       },
       {
+        "command": "cargui.viewFeatureInCargoToml",
+        "title": "View Feature in Cargo.toml",
+        "category": "cargUI",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "cargui.removeFeature",
+        "title": "Remove Feature",
+        "category": "cargUI",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cargui.removeEnvironmentVariable",
+        "title": "Remove Environment Variable",
+        "category": "cargUI",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cargui.removeArgument",
+        "title": "Remove Argument",
+        "category": "cargUI",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cargui.removeArgumentSubcategory",
+        "title": "Remove Argument Category",
+        "category": "cargUI",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "cargui.addArgumentSubcategory",
+        "title": "Add Argument Category",
+        "category": "cargUI",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "cargui.addCustomCommandSubcategory",
+        "title": "Add Command Category",
+        "category": "cargUI",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "cargui.removeCustomCommandSubcategory",
+        "title": "Remove Command Category",
+        "category": "cargUI",
+        "icon": "$(trash)"
+      },
+      {
         "command": "cargui.createSnapshot",
         "title": "Create Build Snapshot...",
         "category": "cargUI",
@@ -469,6 +548,12 @@
         "title": "Toggle Watch Mode",
         "category": "cargUI",
         "icon": "$(eye)"
+      },
+      {
+        "command": "cargui.changeEdition",
+        "title": "Change Rust Edition",
+        "category": "cargUI",
+        "icon": "$(versions)"
       },
       {
         "command": "cargui.update",
@@ -688,9 +773,29 @@
         {
           "command": "cargui.newGlobal",
           "group": "navigation"
+        },
+        {
+          "command": "cargui.runTarget",
+          "when": "resourceExtname == .rs",
+          "group": "cargo@1"
+        },
+        {
+          "command": "cargui.buildTarget",
+          "when": "resourceExtname == .rs",
+          "group": "cargo@2"
         }
       ],
       "view/item/context": [
+        {
+          "command": "cargui.runTarget",
+          "when": "view == cargoTargets && viewItem == target",
+          "group": "cargo@1"
+        },
+        {
+          "command": "cargui.buildTarget",
+          "when": "view == cargoTargets && viewItem == target",
+          "group": "cargo@2"
+        },
         {
           "command": "cargui.viewInCargoToml",
           "when": "view == cargoTargets && viewItem == target",
@@ -792,19 +897,44 @@
           "group": "edit@1"
         },
         {
-          "command": "cargui.addCustomCommand",
+          "command": "cargui.addCustomCommandSubcategory",
           "when": "view == cargoTargets && viewItem == customCommandsCategory",
           "group": "inline@1"
         },
         {
-          "command": "cargui.resetCustomCommands",
+          "command": "cargui.addCustomCommand",
           "when": "view == cargoTargets && viewItem == customCommandsCategory",
           "group": "inline@2"
         },
         {
+          "command": "cargui.resetCustomCommands",
+          "when": "view == cargoTargets && viewItem == customCommandsCategory",
+          "group": "inline@3"
+        },
+        {
+          "command": "cargui.addCustomCommand",
+          "when": "view == cargoTargets && viewItem == customCommandSubcategory",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.removeCustomCommandSubcategory",
+          "when": "view == cargoTargets && viewItem == customCommandSubcategory",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.removeCustomCommandSubcategory",
+          "when": "view == cargoTargets && viewItem == customCommandSubcategory",
+          "group": "2_edit@1"
+        },
+        {
           "command": "cargui.editCustomCommand",
           "when": "view == cargoTargets && viewItem == customCommand",
-          "group": "inline"
+          "group": "inline@1"
+        },
+        {
+          "command": "cargui.removeCustomCommand",
+          "when": "view == cargoTargets && viewItem == customCommand",
+          "group": "inline@2"
         },
         {
           "command": "cargui.removeCustomCommand",
@@ -907,6 +1037,11 @@
           "group": "1_view@3"
         },
         {
+          "command": "cargui.removeDependency",
+          "when": "view == cargoTargets && viewItem == dependency",
+          "group": "inline"
+        },
+        {
           "command": "cargui.changeDependencyVersion",
           "when": "view == cargoTargets && viewItem == dependency",
           "group": "2_edit@1"
@@ -920,6 +1055,51 @@
           "command": "cargui.removeDependency",
           "when": "view == cargoTargets && viewItem == dependency",
           "group": "2_edit@3"
+        },
+        {
+          "command": "cargui.viewFeatureInCargoToml",
+          "when": "view == cargoTargets && viewItem == feature",
+          "group": "1_view@1"
+        },
+        {
+          "command": "cargui.removeFeature",
+          "when": "view == cargoTargets && viewItem == feature",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.removeFeature",
+          "when": "view == cargoTargets && viewItem == feature",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "cargui.removeEnvironmentVariable",
+          "when": "view == cargoTargets && viewItem == envVar",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.removeEnvironmentVariable",
+          "when": "view == cargoTargets && viewItem == envVar",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "cargui.addArgumentSubcategory",
+          "when": "view == cargoTargets && viewItem == argumentsCategory",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.addArgument",
+          "when": "view == cargoTargets && viewItem == argumentSubcategory",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.removeArgumentSubcategory",
+          "when": "view == cargoTargets && viewItem == argumentSubcategory",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "cargui.removeArgument",
+          "when": "view == cargoTargets && viewItem == argument",
+          "group": "inline"
         }
       ]
     },

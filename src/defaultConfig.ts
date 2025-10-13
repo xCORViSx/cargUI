@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ArgumentCategory, CustomCommand, Snapshot } from './types';
+import { ArgumentCategory, CustomCommand, CustomCommandCategory, Snapshot } from './types';
 import { discoverWorkspaceMembers, discoverCargoTargets } from './cargoDiscovery';
 import { CargoTreeDataProvider } from './cargoTreeProvider';
 
@@ -20,7 +20,7 @@ export async function initializeDefaultConfig(
         const defaultArgCategories: ArgumentCategory[] = [
             {
                 name: 'Common',
-                arguments: ['--verbose', '--quiet', '--color always', '--color never']
+                arguments: ['--color never', '--keep-going', '--all-targets', '--workspace']
             },
             {
                 name: 'Compilation Targets',
@@ -60,18 +60,30 @@ export async function initializeDefaultConfig(
         cargoTreeProvider.refresh();
     }
 
-    // Initialize default custom commands
-    const customCommandsInspection = config.inspect<CustomCommand[]>('customCommands');
-    if (!customCommandsInspection?.workspaceValue && !customCommandsInspection?.workspaceFolderValue) {
-        const defaultCommands = [
-            { name: 'Clippy Lint', command: 'cargo clippy' },
-            { name: 'Search Crates', command: 'cargo search serde' },
-            { name: 'Add Dependency', command: 'cargo add tokio' },
-            { name: 'Tree Dependencies', command: 'cargo tree' },
-            { name: 'Update', command: 'cargo update' },
-            { name: 'Bench', command: 'cargo bench' }
+    // Initialize default custom command categories
+    const customCommandCategoriesInspection = config.inspect<CustomCommandCategory[]>('customCommandCategories');
+    if (!customCommandCategoriesInspection?.workspaceValue && !customCommandCategoriesInspection?.workspaceFolderValue) {
+        const defaultCategories: CustomCommandCategory[] = [
+            {
+                name: 'Inspection',
+                commands: [
+                    { name: 'Show Outdated Deps', command: 'cargo outdated' },
+                    { name: 'Show Crate Metadata', command: 'cargo metadata --no-deps' },
+                    { name: 'List Installed Tools', command: 'cargo install --list' },
+                    { name: 'Show All Features', command: 'cargo tree --all-features' }
+                ]
+            },
+            {
+                name: 'Analysis',
+                commands: [
+                    { name: 'Check Compile Times', command: 'cargo build --timings' },
+                    { name: 'Show Feature Tree', command: 'cargo tree --format "{p} {f}"' },
+                    { name: 'Analyze Binary Size', command: 'cargo bloat --release' },
+                    { name: 'Generate Docs', command: 'cargo doc --no-deps --open' }
+                ]
+            }
         ];
-        await config.update('customCommands', defaultCommands, vscode.ConfigurationTarget.Workspace);
+        await config.update('customCommandCategories', defaultCategories, vscode.ConfigurationTarget.Workspace);
         cargoTreeProvider.refresh();
     }
 

@@ -105,12 +105,14 @@ export function buildWithFeature(
  * @param targetType - Type of target (bin, example, test, bench)
  * @param release - Whether to run in release mode
  * @param cargoTreeProvider - Tree provider for accessing checked arguments and env vars
+ * @param requiredFeatures - Optional array of required features for this target (one-off, not persisted in UI)
  */
 export function runCargoTarget(
     targetName: string, 
     targetType: 'bin' | 'example' | 'test' | 'bench', 
     release: boolean, 
-    cargoTreeProvider: CargoTreeState
+    cargoTreeProvider: CargoTreeState,
+    requiredFeatures?: string[]
 ) {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
@@ -138,6 +140,13 @@ export function runCargoTarget(
         command += ' --release';
     }
 
+    // Merge checked features with required features (no duplicates)
+    const checkedFeatures = cargoTreeProvider.getCheckedFeatures();
+    const allFeatures = [...new Set([...checkedFeatures, ...(requiredFeatures || [])])];
+    if (allFeatures.length > 0) {
+        command += ` --features ${allFeatures.join(',')}`;
+    }
+
     // Add checked arguments
     const checkedArgs = cargoTreeProvider.getCheckedArguments();
     if (checkedArgs.length > 0) {
@@ -160,18 +169,22 @@ export function runCargoTarget(
 }
 
 /**
- * Builds a single cargo target without running it.
+ * Builds a specific cargo target (binary, example, test, or benchmark).
  * 
  * @param targetName - Name of the target to build
  * @param targetType - Type of target (bin, example, test, bench)
  * @param release - Whether to build in release mode
  * @param selectedWorkspaceMember - Currently selected workspace member
+ * @param cargoTreeProvider - Tree provider for accessing checked features
+ * @param requiredFeatures - Optional array of required features for this target (one-off, not persisted in UI)
  */
 export function buildSingleTarget(
     targetName: string, 
     targetType: 'bin' | 'example' | 'test' | 'bench', 
     release: boolean,
-    selectedWorkspaceMember?: string
+    selectedWorkspaceMember?: string,
+    cargoTreeProvider?: CargoTreeState,
+    requiredFeatures?: string[]
 ) {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
@@ -201,6 +214,15 @@ export function buildSingleTarget(
 
     if (release) {
         command += ' --release';
+    }
+
+    // Merge checked features with required features (no duplicates)
+    if (cargoTreeProvider) {
+        const checkedFeatures = cargoTreeProvider.getCheckedFeatures();
+        const allFeatures = [...new Set([...checkedFeatures, ...(requiredFeatures || [])])];
+        if (allFeatures.length > 0) {
+            command += ` --features ${allFeatures.join(',')}`;
+        }
     }
 
     // Create and show terminal

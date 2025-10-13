@@ -7,6 +7,7 @@ import { CargoTreeItem } from './treeItems';
 import {
 	ArgumentCategory,
 	CustomCommand,
+	CustomCommandCategory,
 	Snapshot,
 	Dependency,
 	CargoTarget,
@@ -28,6 +29,7 @@ import {
 	fetchCrateVersions,
 	searchCrates
 } from './cratesIo';
+import { getCurrentEdition, selectEdition, updateEdition } from './rustEdition';
 import {
 	buildWithFeature,
 	runCargoCommand,
@@ -501,18 +503,19 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 				insertIndex = sectionIndex;
 			}
 
-			for (let i = sectionIndex + 1; i < lines.length; i++) {
-				const trimmed = lines[i].trim();
-				if (trimmed.startsWith('[')) {
-					break;
-				}
-				if (trimmed.startsWith(`${crateName} =`) || trimmed.startsWith(`${crateName}=`)) {
-					vscode.window.showWarningMessage(`Dependency "${crateName}" already exists in ${dependencySection}`);
-					return;
-				}
+		for (let i = sectionIndex + 1; i < lines.length; i++) {
+			const trimmed = lines[i].trim();
+			if (trimmed.startsWith('[')) {
+				break;
 			}
-
-			let depLine = `${crateName} = "${selectedVersion}"`;
+			// Normalize dependency names: Rust treats hyphens and underscores as equivalent
+			const normalizedCrateName = crateName.replace(/_/g, '-');
+			const normalizedLineName = trimmed.split(/\s*=/)[0].trim().replace(/_/g, '-');
+			if (normalizedLineName === normalizedCrateName) {
+				vscode.window.showWarningMessage(`Dependency "${crateName}" already exists in ${dependencySection}`);
+				return;
+			}
+		}			let depLine = `${crateName} = "${selectedVersion}"`;
 			if (selectedFeatures.length > 0) {
 				depLine = `${crateName} = { version = "${selectedVersion}", features = [${selectedFeatures.map(f => `"${f}"`).join(', ')}] }`;
 			}
@@ -769,7 +772,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
 	register('cargui.runTarget', (target: CargoTreeItem) => {
 		if (target && target.target) {
-			runCargoTarget(target.target.name, target.target.type, state.isReleaseMode, cargoTreeProvider);
+			runCargoTarget(target.target.name, target.target.type, state.isReleaseMode, cargoTreeProvider, target.target.requiredFeatures);
 		}
 	});
 
@@ -891,7 +894,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
 	register('cargui.buildTarget', (target: CargoTreeItem) => {
 		if (target && target.target) {
-			buildSingleTarget(target.target.name, target.target.type, state.isReleaseMode);
+			buildSingleTarget(target.target.name, target.target.type, state.isReleaseMode, state.selectedWorkspaceMember, cargoTreeProvider, target.target.requiredFeatures);
 		}
 	});
 
@@ -995,33 +998,44 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 	});
 
-	register('cargui.addArgument', async () => {
+	register('cargui.addArgument', async (item?: CargoTreeItem) => {
 		const config = vscode.workspace.getConfiguration('cargui');
 		const argCategories = config.get<ArgumentCategory[]>('argumentCategories') || [];
 
-		const categoryNames = argCategories.map(cat => cat.name);
-		const selectedCategory = await vscode.window.showQuickPick(
-			[...categoryNames, '+ New Category'],
-			{ placeHolder: 'Select category for the argument' }
-		);
+		// If item is provided (clicked from subcategory), use that category
+		let targetCategoryName: string | undefined;
+		if (item?.categoryName) {
+			targetCategoryName = item.categoryName;
+		} else {
+			// Otherwise, show picker including "Uncategorized" option
+			const categoryNames = argCategories.map(cat => cat.name);
+			const selectedCategory = await vscode.window.showQuickPick(
+				['Uncategorized (top level)', ...categoryNames, '+ New Category'],
+				{ placeHolder: 'Select category for the argument' }
+			);
 
-		if (!selectedCategory) {
-			return;
-		}
-
-		let targetCategoryName = selectedCategory;
-		if (selectedCategory === '+ New Category') {
-			const newCategoryName = await vscode.window.showInputBox({
-				prompt: 'Enter new category name',
-				placeHolder: 'e.g., Custom, Advanced, etc.'
-			});
-
-			if (!newCategoryName || !newCategoryName.trim()) {
+			if (!selectedCategory) {
 				return;
 			}
 
-			targetCategoryName = newCategoryName.trim();
-			argCategories.push({ name: targetCategoryName, arguments: [] });
+			if (selectedCategory === 'Uncategorized (top level)') {
+				targetCategoryName = undefined; // Signal for top-level
+			} else {
+				targetCategoryName = selectedCategory;
+				if (selectedCategory === '+ New Category') {
+					const newCategoryName = await vscode.window.showInputBox({
+						prompt: 'Enter new category name',
+						placeHolder: 'e.g., Custom, Advanced, etc.'
+					});
+
+					if (!newCategoryName || !newCategoryName.trim()) {
+						return;
+					}
+
+					targetCategoryName = newCategoryName.trim();
+					argCategories.push({ name: targetCategoryName, arguments: [] });
+				}
+			}
 		}
 
 		const input = await vscode.window.showInputBox({
@@ -1030,21 +1044,34 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		});
 
 		if (input && input.trim()) {
-			const category = argCategories.find(cat => cat.name === targetCategoryName);
-			if (!category) {
-				vscode.window.showErrorMessage(`Category '${targetCategoryName}' not found`);
-				return;
-			}
+			if (targetCategoryName === undefined) {
+				// Add to top-level uncategorized arguments
+				const strays = config.get<string[]>('arguments') || [];
+				if (strays.includes(input.trim())) {
+					vscode.window.showWarningMessage(`Argument '${input.trim()}' already exists`);
+					return;
+				}
+				strays.push(input.trim());
+				await config.update('arguments', strays, vscode.ConfigurationTarget.Workspace);
+				cargoTreeProvider.refresh();
+				vscode.window.showInformationMessage(`Added uncategorized argument: ${input.trim()}`);
+			} else {
+				const category = argCategories.find(cat => cat.name === targetCategoryName);
+				if (!category) {
+					vscode.window.showErrorMessage(`Category '${targetCategoryName}' not found`);
+					return;
+				}
 
-			if (category.arguments.includes(input.trim())) {
-				vscode.window.showWarningMessage(`Argument '${input.trim()}' already exists in ${targetCategoryName}`);
-				return;
-			}
+				if (category.arguments.includes(input.trim())) {
+					vscode.window.showWarningMessage(`Argument '${input.trim()}' already exists in ${targetCategoryName}`);
+					return;
+				}
 
-			category.arguments.push(input.trim());
-			await config.update('argumentCategories', argCategories, vscode.ConfigurationTarget.Workspace);
-			cargoTreeProvider.refresh();
-			vscode.window.showInformationMessage(`Added argument '${input.trim()}' to ${targetCategoryName}`);
+				category.arguments.push(input.trim());
+				await config.update('argumentCategories', argCategories, vscode.ConfigurationTarget.Workspace);
+				cargoTreeProvider.refresh();
+				vscode.window.showInformationMessage(`Added argument '${input.trim()}' to ${targetCategoryName}`);
+			}
 		}
 	});
 
@@ -1061,48 +1088,179 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
 		if (input && input.trim()) {
 			const config = vscode.workspace.getConfiguration('cargui');
-			const currentArgs = config.get<string[]>('arguments') || [];
+			let found = false;
 
-			if (input.trim() !== item.argument && currentArgs.includes(input.trim())) {
-				vscode.window.showWarningMessage(`Argument '${input.trim()}' already exists`);
-				return;
+			// Check for duplicates in both storages
+			const strays = config.get<string[]>('arguments') || [];
+			const argCategories = config.get<ArgumentCategory[]>('argumentCategories') || [];
+			
+			if (input.trim() !== item.argument) {
+				// Check duplicates in uncategorized
+				if (strays.includes(input.trim())) {
+					vscode.window.showWarningMessage(`Argument '${input.trim()}' already exists at top level`);
+					return;
+				}
+				// Check duplicates in categories
+				for (const category of argCategories) {
+					if (category.arguments.includes(input.trim())) {
+						vscode.window.showWarningMessage(`Argument '${input.trim()}' already exists in ${category.name}`);
+						return;
+					}
+				}
 			}
 
-			const updatedArgs = currentArgs.map(arg => (arg === item.argument ? input.trim() : arg));
-			await config.update('arguments', updatedArgs, vscode.ConfigurationTarget.Workspace);
-			cargoTreeProvider.renameCheckedArgument(item.argument, input.trim());
-			cargoTreeProvider.refresh();
-			vscode.window.showInformationMessage(`Updated argument: ${item.argument} → ${input.trim()}`);
+			// Try to update in uncategorized first
+			const strayIndex = strays.indexOf(item.argument);
+			if (strayIndex !== -1) {
+				strays[strayIndex] = input.trim();
+				await config.update('arguments', strays, vscode.ConfigurationTarget.Workspace);
+				found = true;
+			} else {
+				// Try to update in categories
+				for (const category of argCategories) {
+					const index = category.arguments.indexOf(item.argument);
+					if (index !== -1) {
+						category.arguments[index] = input.trim();
+						await config.update('argumentCategories', argCategories, vscode.ConfigurationTarget.Workspace);
+						found = true;
+						break;
+					}
+				}
+			}
+
+			if (found) {
+				cargoTreeProvider.renameCheckedArgument(item.argument, input.trim());
+				cargoTreeProvider.refresh();
+				vscode.window.showInformationMessage(`Updated argument: ${item.argument} → ${input.trim()}`);
+			} else {
+				vscode.window.showWarningMessage(`Argument "${item.argument}" not found`);
+			}
 		}
 	});
 
 	register('cargui.removeArgument', async (item: CargoTreeItem) => {
-		let targetItem = item;
-		if (!targetItem) {
-			const treeView = cargoTreeProvider.treeView;
-			if (treeView?.selection?.length) {
-				targetItem = treeView.selection[0];
-			}
-		}
-
-		if (!targetItem?.argument) {
+		if (!item?.argument) {
 			return;
 		}
 
 		const confirm = await vscode.window.showWarningMessage(
-			`Remove argument '${targetItem.argument}'?`,
+			`Remove argument "${item.argument}"?`,
 			{ modal: true },
 			'Remove'
 		);
 
-		if (confirm === 'Remove') {
-			const config = vscode.workspace.getConfiguration('cargui');
-			const currentArgs = config.get<string[]>('arguments') || [];
-			const updatedArgs = currentArgs.filter(arg => arg !== targetItem.argument);
-			await config.update('arguments', updatedArgs, vscode.ConfigurationTarget.Workspace);
-			cargoTreeProvider.removeCheckedArgument(targetItem.argument);
+		if (confirm !== 'Remove') {
+			return;
+		}
+
+		const config = vscode.workspace.getConfiguration('cargui');
+		let removed = false;
+
+		// First try to remove from uncategorized (flat array)
+		const strays = config.get<string[]>('arguments') || [];
+		const strayIndex = strays.indexOf(item.argument);
+		if (strayIndex !== -1) {
+			strays.splice(strayIndex, 1);
+			await config.update('arguments', strays, vscode.ConfigurationTarget.Workspace);
+			removed = true;
+		} else {
+			// Try to remove from categories
+			const argCategories = config.get<ArgumentCategory[]>('argumentCategories') || [];
+			for (const category of argCategories) {
+				const index = category.arguments.indexOf(item.argument);
+				if (index !== -1) {
+					category.arguments.splice(index, 1);
+					await config.update('argumentCategories', argCategories, vscode.ConfigurationTarget.Workspace);
+					removed = true;
+					break;
+				}
+			}
+		}
+
+		if (!removed) {
+			vscode.window.showWarningMessage(`Argument "${item.argument}" not found`);
+			return;
+		}
+
+		try {
+			cargoTreeProvider.removeCheckedArgument(item.argument);
 			cargoTreeProvider.refresh();
-			vscode.window.showInformationMessage(`Removed argument: ${targetItem.argument}`);
+			vscode.window.showInformationMessage(`Removed argument: ${item.argument}`);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to remove argument: ${error}`);
+		}
+	});
+
+	register('cargui.addArgumentSubcategory', async () => {
+		const config = vscode.workspace.getConfiguration('cargui');
+		const argCategories = config.get<ArgumentCategory[]>('argumentCategories') || [];
+
+		const categoryName = await vscode.window.showInputBox({
+			prompt: 'Enter new argument category name',
+			placeHolder: 'e.g., Network, Performance, Custom, etc.'
+		});
+
+		if (!categoryName || !categoryName.trim()) {
+			return;
+		}
+
+		const trimmedName = categoryName.trim();
+
+		// Check if category already exists
+		if (argCategories.find(cat => cat.name === trimmedName)) {
+			vscode.window.showWarningMessage(`Category "${trimmedName}" already exists`);
+			return;
+		}
+
+		try {
+			argCategories.push({ name: trimmedName, arguments: [] });
+			await config.update('argumentCategories', argCategories, vscode.ConfigurationTarget.Workspace);
+			cargoTreeProvider.refresh();
+			vscode.window.showInformationMessage(`Added argument category: ${trimmedName}`);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to add argument category: ${error}`);
+		}
+	});
+
+	register('cargui.removeArgumentSubcategory', async (item: CargoTreeItem) => {
+		if (!item?.categoryName) {
+			return;
+		}
+
+		const categoryName = item.categoryName;
+		const config = vscode.workspace.getConfiguration('cargui');
+		const argCategories = config.get<ArgumentCategory[]>('argumentCategories') || [];
+
+		const category = argCategories.find(cat => cat.name === categoryName);
+		if (!category) {
+			vscode.window.showWarningMessage(`Category "${categoryName}" not found`);
+			return;
+		}
+
+		const argCount = category.arguments.length;
+		const confirm = await vscode.window.showWarningMessage(
+			`Remove argument category "${categoryName}"?${argCount > 0 ? ` This will delete ${argCount} argument(s).` : ''}`,
+			{ modal: true },
+			'Remove'
+		);
+
+		if (confirm !== 'Remove') {
+			return;
+		}
+
+		try {
+			// Remove any checked arguments from this category
+			for (const arg of category.arguments) {
+				cargoTreeProvider.removeCheckedArgument(arg);
+			}
+
+			// Remove the category
+			const newCategories = argCategories.filter(cat => cat.name !== categoryName);
+			await config.update('argumentCategories', newCategories, vscode.ConfigurationTarget.Workspace);
+			cargoTreeProvider.refresh();
+			vscode.window.showInformationMessage(`Removed argument category: ${categoryName}`);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to remove argument category: ${error}`);
 		}
 	});
 
@@ -1128,17 +1286,20 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
 	register('cargui.resetArguments', async () => {
 		const confirm = await vscode.window.showWarningMessage(
-			'Reset arguments to default library? This will replace your current argument categories.',
+			'Reset arguments to default library? This will merge defaults into your categories or create new ones.',
 			{ modal: true },
 			'Reset'
 		);
 
 		if (confirm === 'Reset') {
 			const config = vscode.workspace.getConfiguration('cargui');
+			const existingCategories = config.get<ArgumentCategory[]>('argumentCategories') || [];
+			const strays = config.get<string[]>('arguments') || [];
+			
 			const defaultArgCategories: ArgumentCategory[] = [
 				{
 					name: 'Common',
-					arguments: ['--verbose', '--quiet', '--color always', '--color never']
+					arguments: ['--color never', '--keep-going', '--all-targets', '--workspace']
 				},
 				{
 					name: 'Compilation Targets',
@@ -1166,7 +1327,37 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 					arguments: ['--locked', '--frozen', '--offline', '--all-features', '--no-default-features']
 				}
 			];
-			await config.update('argumentCategories', defaultArgCategories, vscode.ConfigurationTarget.Workspace);
+
+			// Merge defaults into existing categories or create new ones
+			for (const defaultCat of defaultArgCategories) {
+				const existingCat = existingCategories.find(c => c.name === defaultCat.name);
+				if (existingCat) {
+					// Replace arguments in existing category
+					for (const arg of defaultCat.arguments) {
+						if (!existingCat.arguments.includes(arg)) {
+							existingCat.arguments.push(arg);
+						}
+					}
+					// Remove from strays if present
+					for (let i = strays.length - 1; i >= 0; i--) {
+						if (defaultCat.arguments.includes(strays[i])) {
+							strays.splice(i, 1);
+						}
+					}
+				} else {
+					// Create new category
+					existingCategories.push(defaultCat);
+					// Remove from strays if present
+					for (let i = strays.length - 1; i >= 0; i--) {
+						if (defaultCat.arguments.includes(strays[i])) {
+							strays.splice(i, 1);
+						}
+					}
+				}
+			}
+
+			await config.update('argumentCategories', existingCategories, vscode.ConfigurationTarget.Workspace);
+			await config.update('arguments', strays, vscode.ConfigurationTarget.Workspace);
 			cargoTreeProvider.refresh();
 			vscode.window.showInformationMessage('Cargo arguments reset to default library');
 		}
@@ -1282,7 +1473,45 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 	});
 
-	register('cargui.addCustomCommand', async () => {
+	register('cargui.addCustomCommand', async (item?: CargoTreeItem) => {
+		const config = vscode.workspace.getConfiguration('cargui');
+		const cmdCategories = config.get<CustomCommandCategory[]>('customCommandCategories') || [];
+
+		// If item is provided (clicked from subcategory), use that category
+		let targetCategoryName: string | undefined;
+		if (item?.categoryName) {
+			targetCategoryName = item.categoryName;
+		} else {
+			// Otherwise, show picker with uncategorized option
+			const categoryNames = cmdCategories.map(cat => cat.name);
+			const selectedCategory = await vscode.window.showQuickPick(
+				['Uncategorized (top level)', ...categoryNames, '+ New Category'],
+				{ placeHolder: 'Select category for the command (or leave uncategorized)' }
+			);
+
+			if (!selectedCategory) {
+				return;
+			}
+
+			if (selectedCategory === 'Uncategorized (top level)') {
+				targetCategoryName = undefined; // Signal uncategorized
+			} else if (selectedCategory === '+ New Category') {
+				const newCategoryName = await vscode.window.showInputBox({
+					prompt: 'Enter new category name',
+					placeHolder: 'e.g., Build, Test, Analysis, etc.'
+				});
+
+				if (!newCategoryName || !newCategoryName.trim()) {
+					return;
+				}
+
+				targetCategoryName = newCategoryName.trim();
+				cmdCategories.push({ name: targetCategoryName, commands: [] });
+			} else {
+				targetCategoryName = selectedCategory;
+			}
+		}
+
 		const name = await vscode.window.showInputBox({
 			prompt: 'Enter custom command name',
 			placeHolder: 'e.g., Release Linux, Full Test Suite, etc.'
@@ -1299,29 +1528,66 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		});
 
 		if (command && command.trim()) {
-			const config = vscode.workspace.getConfiguration('cargui');
-			const currentCommands = config.get<CustomCommand[]>('customCommands') || [];
+			if (targetCategoryName === undefined) {
+				// Add to uncategorized (flat array)
+				const strays = config.get<CustomCommand[]>('customCommands') || [];
+				
+				if (strays.some(cmd => cmd.name === name.trim())) {
+					vscode.window.showWarningMessage(`Custom command '${name.trim()}' already exists at top level`);
+					return;
+				}
+				
+				strays.push({ name: name.trim(), command: command.trim() });
+				await config.update('customCommands', strays, vscode.ConfigurationTarget.Workspace);
+				cargoTreeProvider.refresh();
+				vscode.window.showInformationMessage(`Added custom command '${name.trim()}' at top level`);
+			} else {
+				// Add to category
+				const category = cmdCategories.find(cat => cat.name === targetCategoryName);
+				if (!category) {
+					vscode.window.showErrorMessage(`Category '${targetCategoryName}' not found`);
+					return;
+				}
 
-			if (currentCommands.some(cmd => cmd.name === name.trim())) {
-				vscode.window.showWarningMessage(`Custom command '${name.trim()}' already exists`);
-				return;
+				if (category.commands.some(cmd => cmd.name === name.trim())) {
+					vscode.window.showWarningMessage(`Custom command '${name.trim()}' already exists in ${targetCategoryName}`);
+					return;
+				}
+
+				category.commands.push({ name: name.trim(), command: command.trim() });
+				await config.update('customCommandCategories', cmdCategories, vscode.ConfigurationTarget.Workspace);
+				cargoTreeProvider.refresh();
+				vscode.window.showInformationMessage(`Added custom command '${name.trim()}' to ${targetCategoryName}`);
 			}
-
-			const updatedCommands = [...currentCommands, { name: name.trim(), command: command.trim() }];
-			await config.update('customCommands', updatedCommands, vscode.ConfigurationTarget.Workspace);
-			cargoTreeProvider.refresh();
-			vscode.window.showInformationMessage(`Added custom command: ${name.trim()}`);
 		}
 	});
 
 	register('cargui.editCustomCommand', async (item: CargoTreeItem) => {
-		if (!item?.envVar) {
+		if (!item?.categoryName) {
 			return;
 		}
 
 		const config = vscode.workspace.getConfiguration('cargui');
-		const currentCommands = config.get<CustomCommand[]>('customCommands') || [];
-		const cmd = currentCommands.find(c => c.name === item.envVar);
+		let cmd: CustomCommand | undefined;
+		let isStray = false;
+
+		// First check uncategorized (flat array)
+		const strays = config.get<CustomCommand[]>('customCommands') || [];
+		cmd = strays.find(c => c.name === item.categoryName);
+		
+		if (cmd) {
+			isStray = true;
+		} else {
+			// Check in categories
+			const cmdCategories = config.get<CustomCommandCategory[]>('customCommandCategories') || [];
+			for (const category of cmdCategories) {
+				cmd = category.commands.find(c => c.name === item.categoryName);
+				if (cmd) {
+					break;
+				}
+			}
+		}
+
 		if (!cmd) {
 			return;
 		}
@@ -1343,66 +1609,230 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		});
 
 		if (command && command.trim()) {
-			if (name.trim() !== cmd.name && currentCommands.some(c => c.name === name.trim())) {
-				vscode.window.showWarningMessage(`Custom command '${name.trim()}' already exists`);
-				return;
+			// Check for duplicates in both storages
+			if (name.trim() !== cmd.name) {
+				// Check in uncategorized
+				if (strays.some(c => c.name === name.trim())) {
+					vscode.window.showWarningMessage(`Custom command '${name.trim()}' already exists at top level`);
+					return;
+				}
+				// Check in categories
+				const cmdCategories = config.get<CustomCommandCategory[]>('customCommandCategories') || [];
+				for (const category of cmdCategories) {
+					if (category.commands.some(c => c.name === name.trim())) {
+						vscode.window.showWarningMessage(`Custom command '${name.trim()}' already exists in ${category.name}`);
+						return;
+					}
+				}
 			}
 
-			const updatedCommands = currentCommands.map(c =>
-				c.name === cmd.name ? { name: name.trim(), command: command.trim() } : c
-			);
-			await config.update('customCommands', updatedCommands, vscode.ConfigurationTarget.Workspace);
+			if (isStray) {
+				// Update in uncategorized
+				const updatedStrays = strays.map(c =>
+					c.name === cmd!.name ? { name: name.trim(), command: command.trim() } : c
+				);
+				await config.update('customCommands', updatedStrays, vscode.ConfigurationTarget.Workspace);
+			} else {
+				// Update in categories
+				const cmdCategories = config.get<CustomCommandCategory[]>('customCommandCategories') || [];
+				for (const category of cmdCategories) {
+					const index = category.commands.findIndex(c => c.name === cmd!.name);
+					if (index !== -1) {
+						category.commands[index] = { name: name.trim(), command: command.trim() };
+						await config.update('customCommandCategories', cmdCategories, vscode.ConfigurationTarget.Workspace);
+						break;
+					}
+				}
+			}
+
 			cargoTreeProvider.refresh();
 			vscode.window.showInformationMessage(`Updated custom command: ${cmd.name} → ${name.trim()}`);
 		}
 	});
 
 	register('cargui.removeCustomCommand', async (item: CargoTreeItem) => {
-		if (!item?.envVar) {
+		if (!item?.categoryName) {
 			return;
 		}
 
 		const config = vscode.workspace.getConfiguration('cargui');
-		const currentCommands = config.get<CustomCommand[]>('customCommands') || [];
-		const cmd = currentCommands.find(c => c.name === item.envVar);
-		if (!cmd) {
-			return;
+		let removed = false;
+		let commandName = item.categoryName;
+
+		// First try to remove from uncategorized (flat array)
+		const strays = config.get<CustomCommand[]>('customCommands') || [];
+		const strayCmd = strays.find(c => c.name === commandName);
+		
+		if (strayCmd) {
+			const confirm = await vscode.window.showWarningMessage(
+				`Remove custom command '${strayCmd.name}'?`,
+				{ modal: true },
+				'Remove'
+			);
+
+			if (confirm === 'Remove') {
+				const updatedStrays = strays.filter(c => c.name !== strayCmd.name);
+				await config.update('customCommands', updatedStrays, vscode.ConfigurationTarget.Workspace);
+				removed = true;
+			}
+		} else {
+			// Try to remove from categories
+			const cmdCategories = config.get<CustomCommandCategory[]>('customCommandCategories') || [];
+			
+			for (const category of cmdCategories) {
+				const cmd = category.commands.find(c => c.name === commandName);
+				if (cmd) {
+					const confirm = await vscode.window.showWarningMessage(
+						`Remove custom command '${cmd.name}'?`,
+						{ modal: true },
+						'Remove'
+					);
+
+					if (confirm === 'Remove') {
+						category.commands = category.commands.filter(c => c.name !== cmd.name);
+						await config.update('customCommandCategories', cmdCategories, vscode.ConfigurationTarget.Workspace);
+						removed = true;
+					}
+					break;
+				}
+			}
 		}
 
-		const confirm = await vscode.window.showWarningMessage(
-			`Remove custom command '${cmd.name}'?`,
-			{ modal: true },
-			'Remove'
-		);
-
-		if (confirm === 'Remove') {
-			const updatedCommands = currentCommands.filter(c => c.name !== cmd.name);
-			await config.update('customCommands', updatedCommands, vscode.ConfigurationTarget.Workspace);
+		if (removed) {
 			cargoTreeProvider.refresh();
-			vscode.window.showInformationMessage(`Removed custom command: ${cmd.name}`);
+			vscode.window.showInformationMessage(`Removed custom command: ${commandName}`);
 		}
 	});
 
 	register('cargui.resetCustomCommands', async () => {
 		const confirm = await vscode.window.showWarningMessage(
-			'Reset custom commands to default presets? This will replace your current custom commands list.',
+			'Reset custom commands to default presets? This will merge defaults into your categories.',
 			{ modal: true },
 			'Reset'
 		);
 
 		if (confirm === 'Reset') {
 			const config = vscode.workspace.getConfiguration('cargui');
+			const existingCategories = config.get<CustomCommandCategory[]>('customCommandCategories') || [];
+			const strays = config.get<CustomCommand[]>('customCommands') || [];
+			
 			const defaultCommands: CustomCommand[] = [
-				{ name: 'Clippy Lint', command: 'cargo clippy' },
-				{ name: 'Search Crates', command: 'cargo search serde' },
-				{ name: 'Add Dependency', command: 'cargo add tokio' },
-				{ name: 'Tree Dependencies', command: 'cargo tree' },
-				{ name: 'Update', command: 'cargo update' },
-				{ name: 'Bench', command: 'cargo bench' }
+				{ name: 'Show Outdated Deps', command: 'cargo outdated' },
+				{ name: 'Show Crate Metadata', command: 'cargo metadata --no-deps' },
+				{ name: 'List Installed Tools', command: 'cargo install --list' },
+				{ name: 'Show All Features', command: 'cargo tree --all-features' },
+				{ name: 'Check Compile Times', command: 'cargo build --timings' },
+				{ name: 'Show Feature Tree', command: 'cargo tree --format "{p} {f}"' },
+				{ name: 'Analyze Binary Size', command: 'cargo bloat --release' },
+				{ name: 'Generate Docs', command: 'cargo doc --no-deps --open' }
 			];
-			await config.update('customCommands', defaultCommands, vscode.ConfigurationTarget.Workspace);
+
+			// Try to place defaults in existing categories
+			for (const defaultCmd of defaultCommands) {
+				let placed = false;
+				
+				// Check if it already exists in any category
+				for (const cat of existingCategories) {
+					const existing = cat.commands.find(c => c.name === defaultCmd.name);
+					if (existing) {
+						// Update command in category
+						existing.command = defaultCmd.command;
+						placed = true;
+						break;
+					}
+				}
+
+				// Remove from strays if it was there
+				const strayIndex = strays.findIndex(c => c.name === defaultCmd.name);
+				if (strayIndex !== -1) {
+					if (!placed) {
+						// Update in strays
+						strays[strayIndex].command = defaultCmd.command;
+					} else {
+						// Remove from strays since it's now in a category
+						strays.splice(strayIndex, 1);
+					}
+					placed = true;
+				}
+
+				// If not placed anywhere, add to strays
+				if (!placed) {
+					strays.push(defaultCmd);
+				}
+			}
+
+			await config.update('customCommandCategories', existingCategories, vscode.ConfigurationTarget.Workspace);
+			await config.update('customCommands', strays, vscode.ConfigurationTarget.Workspace);
 			cargoTreeProvider.refresh();
 			vscode.window.showInformationMessage('Custom commands reset to defaults');
+		}
+	});
+
+	register('cargui.addCustomCommandSubcategory', async () => {
+		const config = vscode.workspace.getConfiguration('cargui');
+		const cmdCategories = config.get<CustomCommandCategory[]>('customCommandCategories') || [];
+
+		const categoryName = await vscode.window.showInputBox({
+			prompt: 'Enter new command category name',
+			placeHolder: 'e.g., Build, Test, Deploy, Analysis, etc.'
+		});
+
+		if (!categoryName || !categoryName.trim()) {
+			return;
+		}
+
+		const trimmedName = categoryName.trim();
+
+		// Check if category already exists
+		if (cmdCategories.find(cat => cat.name === trimmedName)) {
+			vscode.window.showWarningMessage(`Category "${trimmedName}" already exists`);
+			return;
+		}
+
+		try {
+			cmdCategories.push({ name: trimmedName, commands: [] });
+			await config.update('customCommandCategories', cmdCategories, vscode.ConfigurationTarget.Workspace);
+			cargoTreeProvider.refresh();
+			vscode.window.showInformationMessage(`Added command category: ${trimmedName}`);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to add command category: ${error}`);
+		}
+	});
+
+	register('cargui.removeCustomCommandSubcategory', async (item: CargoTreeItem) => {
+		if (!item?.categoryName) {
+			return;
+		}
+
+		const categoryName = item.categoryName;
+		const config = vscode.workspace.getConfiguration('cargui');
+		const cmdCategories = config.get<CustomCommandCategory[]>('customCommandCategories') || [];
+
+		const category = cmdCategories.find(cat => cat.name === categoryName);
+		if (!category) {
+			vscode.window.showWarningMessage(`Category "${categoryName}" not found`);
+			return;
+		}
+
+		const cmdCount = category.commands.length;
+		const confirm = await vscode.window.showWarningMessage(
+			`Remove command category "${categoryName}"?${cmdCount > 0 ? ` This will delete ${cmdCount} command(s).` : ''}`,
+			{ modal: true },
+			'Remove'
+		);
+
+		if (confirm !== 'Remove') {
+			return;
+		}
+
+		try {
+			// Remove the category
+			const newCategories = cmdCategories.filter(cat => cat.name !== categoryName);
+			await config.update('customCommandCategories', newCategories, vscode.ConfigurationTarget.Workspace);
+			cargoTreeProvider.refresh();
+			vscode.window.showInformationMessage(`Removed command category: ${categoryName}`);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to remove command category: ${error}`);
 		}
 	});
 
@@ -1726,6 +2156,31 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		state.isWatchMode = true;
 		cargoTreeProvider.refresh();
 		vscode.window.showInformationMessage(`Watch mode started: ${state.watchAction}`);
+	});
+
+	register('cargui.changeEdition', async () => {
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+		if (!workspaceFolder) {
+			vscode.window.showErrorMessage('No workspace folder found');
+			return;
+		}
+
+		const currentEdition = getCurrentEdition(workspaceFolder.uri.fsPath);
+		if (!currentEdition) {
+			vscode.window.showErrorMessage('Could not read current edition from Cargo.toml');
+			return;
+		}
+
+		const newEdition = await selectEdition(workspaceFolder.uri.fsPath, currentEdition);
+		if (newEdition && newEdition !== currentEdition) {
+			const success = await updateEdition(workspaceFolder.uri.fsPath, newEdition);
+			if (success) {
+				cargoTreeProvider.refresh();
+				vscode.window.showInformationMessage(`Rust edition changed to ${newEdition}`);
+			} else {
+				vscode.window.showErrorMessage('Failed to update edition in Cargo.toml');
+			}
+		}
 	});
 
 	register('cargui.new', async () => {
@@ -2099,11 +2554,12 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 					continue;
 				}
 
-				const isDependencyLine =
-					(inDependencies || inDevDependencies || inBuildDependencies || inWorkspaceDependencies) &&
-					(trimmed.startsWith(`${dep.name} =`) || trimmed.startsWith(`${dep.name}=`));
-
-				if (isDependencyLine) {
+			// Normalize dependency names: Rust treats hyphens and underscores as equivalent
+			const normalizedDepName = dep.name.replace(/_/g, '-');
+			const normalizedLineName = trimmed.split(/\s*=/)[0].trim().replace(/_/g, '-');
+			const isDependencyLine =
+				(inDependencies || inDevDependencies || inBuildDependencies || inWorkspaceDependencies) &&
+				normalizedLineName === normalizedDepName;				if (isDependencyLine) {
 					removed = true;
 					while (i + 1 < lines.length) {
 						const nextLine = lines[i + 1];
@@ -2215,11 +2671,12 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 					continue;
 				}
 
-				const matchesDependency =
-					(inDependencies || inDevDependencies || inBuildDependencies || inWorkspaceDependencies) &&
-					(trimmed.startsWith(`${dep.name} =`) || trimmed.startsWith(`${dep.name}=`));
-
-				if (matchesDependency) {
+			// Normalize dependency names: Rust treats hyphens and underscores as equivalent
+			const normalizedDepName = dep.name.replace(/_/g, '-');
+			const normalizedLineName = trimmed.split(/\s*=/)[0].trim().replace(/_/g, '-');
+			const matchesDependency =
+				(inDependencies || inDevDependencies || inBuildDependencies || inWorkspaceDependencies) &&
+				normalizedLineName === normalizedDepName;				if (matchesDependency) {
 					lineNumber = i;
 					break;
 				}
@@ -2237,6 +2694,197 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
 		} catch (error) {
 			vscode.window.showErrorMessage(`Failed to open Cargo.toml: ${error}`);
+		}
+	});
+
+	register('cargui.viewFeatureInCargoToml', async (item: CargoTreeItem) => {
+		if (!item?.feature) {
+			return;
+		}
+
+		const featureName = item.feature;
+		const workspace = vscode.workspace.workspaceFolders?.[0];
+		if (!workspace) {
+			return;
+		}
+
+		const members = discoverWorkspaceMembers(workspace.uri.fsPath);
+		let cargoTomlPath: string;
+		if (state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all') {
+			const member = members.find(m => m.name === state.selectedWorkspaceMember);
+			if (!member) {
+				vscode.window.showErrorMessage('Selected workspace member not found');
+				return;
+			}
+			cargoTomlPath = path.join(workspace.uri.fsPath, member.path, 'Cargo.toml');
+		} else {
+			cargoTomlPath = path.join(workspace.uri.fsPath, 'Cargo.toml');
+		}
+
+		if (!fs.existsSync(cargoTomlPath)) {
+			vscode.window.showErrorMessage(`Cargo.toml not found at ${cargoTomlPath}`);
+			return;
+		}
+
+		try {
+			const content = fs.readFileSync(cargoTomlPath, 'utf-8');
+			const lines = content.split('\n');
+			let lineNumber = -1;
+			let inFeatures = false;
+
+			for (let i = 0; i < lines.length; i++) {
+				const trimmed = lines[i].trim();
+
+				if (trimmed === '[features]') {
+					inFeatures = true;
+					continue;
+				}
+
+				if (trimmed.startsWith('[')) {
+					inFeatures = false;
+					continue;
+				}
+
+				if (inFeatures && trimmed.startsWith(`${featureName} =`)) {
+					lineNumber = i;
+					break;
+				}
+			}
+
+			if (lineNumber === -1) {
+				vscode.window.showWarningMessage(`Feature "${featureName}" not found in Cargo.toml`);
+				return;
+			}
+
+			const document = await vscode.workspace.openTextDocument(cargoTomlPath);
+			const editor = await vscode.window.showTextDocument(document);
+			const position = new vscode.Position(lineNumber, 0);
+			editor.selection = new vscode.Selection(position, position);
+			editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to open Cargo.toml: ${error}`);
+		}
+	});
+
+	register('cargui.removeFeature', async (item: CargoTreeItem) => {
+		if (!item?.feature) {
+			return;
+		}
+
+		const featureName = item.feature;
+		const workspace = vscode.workspace.workspaceFolders?.[0];
+		if (!workspace) {
+			return;
+		}
+
+		const confirm = await vscode.window.showWarningMessage(
+			`Remove feature "${featureName}"?`,
+			{ modal: true },
+			'Remove'
+		);
+
+		if (confirm !== 'Remove') {
+			return;
+		}
+
+		const members = discoverWorkspaceMembers(workspace.uri.fsPath);
+		let cargoTomlPath: string;
+		if (state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all') {
+			const member = members.find(m => m.name === state.selectedWorkspaceMember);
+			if (!member) {
+				vscode.window.showErrorMessage('Selected workspace member not found');
+				return;
+			}
+			cargoTomlPath = path.join(workspace.uri.fsPath, member.path, 'Cargo.toml');
+		} else {
+			cargoTomlPath = path.join(workspace.uri.fsPath, 'Cargo.toml');
+		}
+
+		if (!fs.existsSync(cargoTomlPath)) {
+			vscode.window.showErrorMessage(`Cargo.toml not found at ${cargoTomlPath}`);
+			return;
+		}
+
+		try {
+			const content = fs.readFileSync(cargoTomlPath, 'utf-8');
+			const lines = content.split('\n');
+			let inFeatures = false;
+			let removed = false;
+			const newLines: string[] = [];
+
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
+				const trimmed = line.trim();
+
+				if (trimmed === '[features]') {
+					inFeatures = true;
+					newLines.push(line);
+					continue;
+				}
+
+				if (trimmed.startsWith('[')) {
+					inFeatures = false;
+					newLines.push(line);
+					continue;
+				}
+
+				if (inFeatures && trimmed.startsWith(`${featureName} =`)) {
+					removed = true;
+					continue; // Skip this line
+				}
+
+				newLines.push(line);
+			}
+
+			if (!removed) {
+				vscode.window.showWarningMessage(`Feature "${featureName}" not found in Cargo.toml`);
+				return;
+			}
+
+			fs.writeFileSync(cargoTomlPath, newLines.join('\n'), 'utf-8');
+			vscode.window.showInformationMessage(`Removed feature: ${featureName}`);
+			cargoTreeProvider.refresh();
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to remove feature: ${error}`);
+		}
+	});
+
+	register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
+		if (!item?.envVar) {
+			return;
+		}
+
+		const envVar = item.envVar;
+		const workspace = vscode.workspace.workspaceFolders?.[0];
+		if (!workspace) {
+			return;
+		}
+
+		const confirm = await vscode.window.showWarningMessage(
+			`Remove environment variable "${envVar}"?`,
+			{ modal: true },
+			'Remove'
+		);
+
+		if (confirm !== 'Remove') {
+			return;
+		}
+
+		const config = vscode.workspace.getConfiguration('cargui');
+		const envVars = config.get<string[]>('environmentVariables') || [];
+		const newEnvVars = envVars.filter(ev => ev !== envVar);
+
+		if (newEnvVars.length === envVars.length) {
+			vscode.window.showWarningMessage(`Environment variable "${envVar}" not found`);
+			return;
+		}
+
+		try {
+			await config.update('environmentVariables', newEnvVars, vscode.ConfigurationTarget.Workspace);
+			vscode.window.showInformationMessage(`Removed environment variable: ${envVar}`);
+			cargoTreeProvider.refresh();
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to remove environment variable: ${error}`);
 		}
 	});
 
@@ -2469,25 +3117,28 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 				}
 			}
 
-			const newLines = [...lines];
-			let addedCount = 0;
-			for (const [depName] of checkedDeps) {
-				let alreadyExists = false;
-				for (let i = dependenciesLineIndex + 1; i <= insertAfterIndex; i++) {
-					const trimmed = lines[i]?.trim();
-					if (trimmed?.startsWith(`${depName} =`) || trimmed?.startsWith(`${depName}=`)) {
+		const newLines = [...lines];
+		let addedCount = 0;
+		for (const [depName] of checkedDeps) {
+			let alreadyExists = false;
+			// Normalize dependency names: Rust treats hyphens and underscores as equivalent
+			const normalizedDepName = depName.replace(/_/g, '-');
+			for (let i = dependenciesLineIndex + 1; i <= insertAfterIndex; i++) {
+				const trimmed = lines[i]?.trim();
+				if (trimmed) {
+					const normalizedLineName = trimmed.split(/\s*=/)[0].trim().replace(/_/g, '-');
+					if (normalizedLineName === normalizedDepName) {
 						alreadyExists = true;
 						break;
 					}
 				}
-
-				if (!alreadyExists) {
-					newLines.splice(insertAfterIndex + 1 + addedCount, 0, `${depName} = { workspace = true }`);
-					addedCount++;
-				}
 			}
 
-			if (addedCount === 0) {
+			if (!alreadyExists) {
+				newLines.splice(insertAfterIndex + 1 + addedCount, 0, `${depName} = { workspace = true }`);
+				addedCount++;
+			}
+		}			if (addedCount === 0) {
 				vscode.window.showInformationMessage('All selected dependencies already exist in member');
 				return;
 			}

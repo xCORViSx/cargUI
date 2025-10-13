@@ -9,6 +9,7 @@ import {
     Dependency,
     Snapshot,
     CustomCommand,
+    CustomCommandCategory,
     ArgumentCategory,
     UnregisteredItem,
     ModuleInfo
@@ -24,6 +25,7 @@ import {
 import { detectModules, buildModuleTree } from './moduleDetection';
 import { fetchCrateVersions } from './cratesIo';
 import { CargoTreeState } from './cargoCommands';
+import { getCurrentEdition } from './rustEdition';
 
 /**
  * Main tree data provider for the Cargo sidebar view.
@@ -591,6 +593,24 @@ export class CargoTreeDataProvider implements
             };
             items.push(watchItem);
 
+            // Rust Edition indicator
+            const currentEdition = getCurrentEdition(workspaceFolder.uri.fsPath);
+            if (currentEdition) {
+                const editionItem = new CargoTreeItem(
+                    `Edition: ${currentEdition}`,
+                    vscode.TreeItemCollapsibleState.None,
+                    TreeItemContext.RustEdition,
+                    { iconName: 'versions' }
+                );
+                editionItem.tooltip = `Rust edition: ${currentEdition}\nClick to change edition`;
+                editionItem.description = '';
+                editionItem.command = {
+                    command: 'cargui.changeEdition',
+                    title: 'Change Rust Edition'
+                };
+                items.push(editionItem);
+            }
+
             // Workspace Members (only show if multi-crate workspace)
             const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
             const isWorkspace = workspaceMembers.length > 0;
@@ -892,11 +912,66 @@ export class CargoTreeDataProvider implements
                 return item;
             }));
         } else if (element.contextValue === TreeItemContext.CustomCommandsCategory) {
-            // Custom Commands category children
+            // Custom Commands category children - show uncategorized commands THEN subcategories
             const config = vscode.workspace.getConfiguration('cargui');
-            const customCommands = config.get<CustomCommand[]>('customCommands') || [];
+            const cmdCategories = config.get<CustomCommandCategory[]>('customCommandCategories') || [];
+            const strays = config.get<CustomCommand[]>('customCommands') || [];
             
-            return Promise.resolve(customCommands.map(cmd => {
+            const items: CargoTreeItem[] = [];
+            
+            // Add uncategorized commands FIRST
+            items.push(...strays.map(cmd => {
+                const item = new CargoTreeItem(
+                    cmd.name,
+                    vscode.TreeItemCollapsibleState.None,
+                    TreeItemContext.CustomCommand,
+                    {
+                        iconName: 'terminal',
+                        categoryName: cmd.name
+                    }
+                );
+                item.tooltip = `Command: ${cmd.command}`;
+                item.description = '';
+                
+                item.command = {
+                    command: 'cargui.runCustomCommand',
+                    title: 'Run Custom Command',
+                    arguments: [cmd]
+                };
+                
+                return item;
+            }));
+            
+            // Add subcategories AFTER
+            items.push(...cmdCategories.map(category => {
+                const item = new CargoTreeItem(
+                    category.name,
+                    vscode.TreeItemCollapsibleState.Collapsed,
+                    TreeItemContext.CustomCommandSubcategory,
+                    {
+                        iconName: 'folder',
+                        categoryName: category.name
+                    }
+                );
+                item.tooltip = `${category.name} (${category.commands.length} commands)`;
+                item.description = `${category.commands.length}`;
+                
+                return item;
+            }));
+            
+            return Promise.resolve(items);
+        } else if (element.contextValue === TreeItemContext.CustomCommandSubcategory) {
+            // Show commands within a subcategory
+            const config = vscode.workspace.getConfiguration('cargui');
+            const cmdCategories = config.get<CustomCommandCategory[]>('customCommandCategories') || [];
+            const categoryName = element.categoryName;
+            const category = cmdCategories.find(cat => cat.name === categoryName);
+            
+            if (!category) {
+                return Promise.resolve([]);
+            }
+            
+            return Promise.resolve(category.commands.map(cmd => {
                 const item = new CargoTreeItem(
                     cmd.name,
                     vscode.TreeItemCollapsibleState.None,
@@ -919,11 +994,45 @@ export class CargoTreeDataProvider implements
                 return item;
             }));
         } else if (element.contextValue === TreeItemContext.ArgumentsCategory) {
-            // Arguments category children - show subcategories
+            // Arguments category children - show uncategorized arguments THEN subcategories
             const config = vscode.workspace.getConfiguration('cargui');
             const argCategories = config.get<ArgumentCategory[]>('argumentCategories') || [];
+            const strays = config.get<string[]>('arguments') || [];
             
-            return Promise.resolve(argCategories.map(category => {
+            const items: CargoTreeItem[] = [];
+            
+            // Add uncategorized arguments FIRST
+            items.push(...strays.map(arg => {
+                const displayLabel = arg.startsWith('--') ? arg.substring(2) : arg;
+                
+                const item = new CargoTreeItem(
+                    displayLabel,
+                    vscode.TreeItemCollapsibleState.None,
+                    TreeItemContext.Argument,
+                    {
+                        iconName: 'symbol-constant',
+                        argument: arg
+                    }
+                );
+                item.tooltip = `Argument: ${arg}`;
+                item.description = '';
+                
+                const isChecked = this.checkedArguments.has(arg);
+                item.checkboxState = isChecked 
+                    ? vscode.TreeItemCheckboxState.Checked 
+                    : vscode.TreeItemCheckboxState.Unchecked;
+                
+                item.command = {
+                    command: 'cargui.toggleArgumentCheck',
+                    title: 'Toggle Argument',
+                    arguments: [arg]
+                };
+                
+                return item;
+            }));
+            
+            // Add subcategories AFTER
+            items.push(...argCategories.map(category => {
                 const item = new CargoTreeItem(
                     category.name,
                     vscode.TreeItemCollapsibleState.Collapsed,
@@ -938,6 +1047,8 @@ export class CargoTreeDataProvider implements
                 
                 return item;
             }));
+            
+            return Promise.resolve(items);
         } else if (element.contextValue === TreeItemContext.ArgumentSubcategory) {
             // Show arguments within a subcategory
             const config = vscode.workspace.getConfiguration('cargui');
@@ -1006,11 +1117,11 @@ export class CargoTreeDataProvider implements
                     ? vscode.TreeItemCheckboxState.Checked 
                     : vscode.TreeItemCheckboxState.Unchecked;
                 
-                // Clicking the label toggles the checkbox
+                // Clicking the label opens Cargo.toml
                 item.command = {
-                    command: 'cargui.toggleFeatureCheck',
-                    title: 'Toggle Feature',
-                    arguments: [feature]
+                    command: 'cargui.viewFeatureInCargoToml',
+                    title: 'View Feature in Cargo.toml',
+                    arguments: [item]
                 };
                 
                 return item;
@@ -1179,21 +1290,31 @@ export class CargoTreeDataProvider implements
                         return { color: 'charts.orange' }; // Incorrect - wrong type for location
                     }
                 } else if (target.type === 'example') {
-                    standardLocations = [`examples/${filename}`];
+                    // Examples can be in examples/ directory (single file or directory with main.rs)
+                    // Check if it's anywhere in the examples/ folder - that's standard
+                    if (pathDir.startsWith('examples')) {
+                        return { color: undefined }; // Standard location - no color
+                    }
                     
                     // Check if example is in wrong location
                     if (pathDir.startsWith('src/bin') || pathDir.startsWith('tests') || pathDir.startsWith('benches')) {
                         return { color: 'charts.orange' }; // Incorrect - wrong type for location
                     }
                 } else if (target.type === 'test') {
-                    standardLocations = [`tests/${filename}`];
+                    // Tests can be in tests/ directory (single file or directory with main.rs)
+                    if (pathDir.startsWith('tests')) {
+                        return { color: undefined }; // Standard location - no color
+                    }
                     
                     // Check if test is in wrong location
                     if (pathDir.startsWith('src/bin') || pathDir.startsWith('examples') || pathDir.startsWith('benches')) {
                         return { color: 'charts.orange' }; // Incorrect - wrong type for location
                     }
                 } else if (target.type === 'bench') {
-                    standardLocations = [`benches/${filename}`];
+                    // Benches can be in benches/ directory (single file or directory with main.rs)
+                    if (pathDir.startsWith('benches')) {
+                        return { color: undefined }; // Standard location - no color
+                    }
                     
                     // Check if bench is in wrong location
                     if (pathDir.startsWith('src/bin') || pathDir.startsWith('examples') || pathDir.startsWith('tests')) {
@@ -1201,23 +1322,21 @@ export class CargoTreeDataProvider implements
                     }
                 }
 
-                // Check if target is in a standard location
-                const isStandard = standardLocations.some(loc => normalizedPath === loc.replace(/\\/g, '/'));
-                
-                if (isStandard) {
-                    // Target is correctly declared and in standard location
-                    // But check if name matches file
-                    if (!nameMatchesFile && target.path !== 'src/main.rs') {
-                        return { color: 'charts.orange' }; // Incorrect - name mismatch in standard location
-                    }
-                    return { color: undefined }; // No color (default)
-                } else {
-                    // Target is declared but in custom location (lighter yellow for custom, regardless of name)
-                    return { color: 'charts.blue' };
-                }
-            };
+            // Check if target is in a standard location (for bins)
+            const isStandard = standardLocations.some(loc => normalizedPath === loc.replace(/\\/g, '/'));
             
-            return Promise.resolve(targets.map(target => {
+            if (isStandard) {
+                // Target is correctly declared and in standard location
+                // But check if name matches file
+                if (!nameMatchesFile && target.path !== 'src/main.rs') {
+                    return { color: 'charts.orange' }; // Incorrect - name mismatch in standard location
+                }
+                return { color: undefined }; // No color (default)
+            } else {
+                // Target is declared but in custom location (lighter yellow for custom, regardless of name)
+                return { color: 'charts.blue' };
+            }
+        };            return Promise.resolve(targets.map(target => {
                 const isMainTarget = target.type === 'bin' && target.path === 'src/main.rs';
                 const targetStatus = getTargetStatus(target);
                 
@@ -1367,6 +1486,13 @@ export class CargoTreeDataProvider implements
                 );
                 item.description = description;
                 item.tooltip = tooltip;
+                
+                // Set click command to view dependency in Cargo.toml
+                item.command = {
+                    command: 'cargui.viewDependencyInCargoToml',
+                    title: 'View in Cargo.toml',
+                    arguments: [item]
+                };
                 
                 // Set resourceUri for file decoration (enables text coloring)
                 item.resourceUri = vscode.Uri.parse(`cargui-dep:${dep.name}`);

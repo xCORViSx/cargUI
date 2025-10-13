@@ -12,6 +12,7 @@ vsc-extension-quickstart.md
 # Demo projects - exclude entirely
 cargui-demo/**
 cargui-demo-single/**
+cacao/**
 
 # Backup and temp files
 README_BACKUP.md

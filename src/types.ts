@@ -23,6 +23,7 @@ export const enum TreeItemContext {
     DependencyTypeFolderBuild = 'dependencyTypeFolder-build',
     UnknownsFolder = 'unknownsFolder',
     ArgumentSubcategory = 'argumentSubcategory',
+    CustomCommandSubcategory = 'customCommandSubcategory',
     
     // Items
     WorkspaceMember = 'workspaceMember',
@@ -40,6 +41,7 @@ export const enum TreeItemContext {
     // Special
     Mode = 'mode',
     WatchMode = 'watchMode',
+    RustEdition = 'rustEdition',
     Command = 'command',
     Separator = 'separator',
     Placeholder = 'placeholder'
@@ -49,6 +51,7 @@ export interface CargoTarget {
     name: string;
     type: 'bin' | 'example' | 'test' | 'bench';
     path?: string;
+    requiredFeatures?: string[];
 }
 
 export interface CargoManifest {
@@ -102,6 +105,11 @@ export interface Snapshot {
 export interface CustomCommand {
     name: string;
     command: string;
+}
+
+export interface CustomCommandCategory {
+    name: string;
+    commands: CustomCommand[];
 }
 
 export interface ArgumentCategory {

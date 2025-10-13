@@ -155,7 +155,11 @@ export async function updateDependencyVersions(
                 continue;
             }
             
-            if (trimmed.startsWith(`${depName} =`)) {
+            // Normalize dependency names: Rust treats hyphens and underscores as equivalent
+            const normalizedDepName = depName.replace(/_/g, '-');
+            const normalizedLineName = trimmed.split(/\s*=/)[0].trim().replace(/_/g, '-');
+            
+            if (normalizedLineName === normalizedDepName) {
                 // Handle different formats:
                 // name = "1.0" or name = "^1.0" or name = "~1.0"
                 // name = { version = "1.0", features = [...] }
