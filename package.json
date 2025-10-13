@@ -2,7 +2,7 @@
   "name": "cargUI",
   "displayName": "cargUI",
   "description": "Native VSCode UI for Rust projects!",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "xCORViSx",
   "icon": "cargui-icon.png",
   "repository": {
@@ -17,7 +17,9 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [
     "onLanguage:rust",
     "workspaceContains:Cargo.toml"
@@ -55,7 +57,10 @@
                 "description": "Arguments in this category"
               }
             },
-            "required": ["name", "arguments"]
+            "required": [
+              "name",
+              "arguments"
+            ]
           }
         },
         "cargui.arguments": {
@@ -120,7 +125,10 @@
               },
               "mode": {
                 "type": "string",
-                "enum": ["debug", "release"],
+                "enum": [
+                  "debug",
+                  "release"
+                ],
                 "description": "Build mode"
               },
               "targets": {
