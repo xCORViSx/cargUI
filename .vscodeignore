@@ -8,9 +8,39 @@ vsc-extension-quickstart.md
 **/.eslintrc.json
 **/*.map
 **/*.ts
-ui/**
-docs/**
-build.rs
-Cargo.toml
-Cargo.lock
-target/**
+
+# Demo projects - exclude entirely
+cargui-demo/**
+cargui-demo-single/**
+
+# Backup and temp files
+README_BACKUP.md
+README_NEW.md
+package.json.broken
+probs.txt
+*.md
+!README.md
+!LICENSE.txt
+!CHANGELOG.md
+
+# Testing and internal docs
+TESTING.md
+ACTION_TESTING.md
+ACTION_SYSTEM_SUMMARY.md
+SMART_DETECTION.md
+NEXT_STEPS.md
+PUBLISHING_GUIDE.md
+CONTRIBUTING.md
+WORKSPACE.md
+CONVERSION_SUMMARY.md
+TESTING_GUIDE.md
+
+# Git files
+.github/**
+
+# Node modules optimization
+node_modules/**/test/**
+node_modules/**/tests/**
+node_modules/**/*.md
+node_modules/**/LICENSE
+node_modules/**/.npmignore

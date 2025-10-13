@@ -1,17 +1,18 @@
 {
-  "name": "cargui",
+  "name": "cargUI",
   "displayName": "cargUI - Cargo GUI",
-  "description": "Native VS Code UI for cargo commands",
-  "version": "0.2.0",
-  "publisher": "CORViS",
+  "description": "Native VSCode UI for Rust projects!",
+  "version": "0.2.1",
+  "publisher": "xCORViSx",
+  "icon": "cargui-icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_USERNAME/cargui.git"
+    "url": "https://github.com/xCORViSx/cargUI.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR_USERNAME/cargui/issues"
+    "url": "https://github.com/xCORViSx/cargUI/issues"
   },
-  "homepage": "https://github.com/YOUR_USERNAME/cargui#readme",
+  "homepage": "https://github.com/xCORViSx/cargUI#readme",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"

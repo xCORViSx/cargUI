@@ -5,7 +5,7 @@ Thank you for your interest in contributing to cargUI! 🎉
 ## Ways to Contribute
 
 ### 🐛 Bug Reports
-Found a bug? Please [open an issue](https://github.com/YOUR_USERNAME/cargui/issues/new) with:
+Found a bug? Please [open an issue](https://github.com/xCORViSx/cargUI/issues/new) with:
 - Clear description of the problem
 - Steps to reproduce
 - Expected vs actual behavior
@@ -13,7 +13,7 @@ Found a bug? Please [open an issue](https://github.com/YOUR_USERNAME/cargui/issu
 - Screenshots if applicable
 
 ### 💡 Feature Requests
-Have an idea? [Create a feature request](https://github.com/YOUR_USERNAME/cargui/issues/new) describing:
+Have an idea? [Create a feature request](https://github.com/xCORViSx/cargUI/issues/new) describing:
 - The problem you're trying to solve
 - Your proposed solution
 - Any alternatives you've considered
@@ -31,7 +31,7 @@ Want to contribute code? Great!
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/cargui.git
+git clone https://github.com/xCORViSx/cargUI.git
 cd cargui
 
 # Install dependencies

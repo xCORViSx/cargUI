@@ -29,7 +29,7 @@ Replace `YOUR_USERNAME` in these files:
 # Name it: cargui
 
 # Then run:
-git remote add origin https://github.com/YOUR_USERNAME/cargui.git
+git remote add origin https://github.com/xCORViSx/cargUI.git
 git push -u origin master
 ```
 

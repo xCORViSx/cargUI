@@ -57,7 +57,7 @@ git push -u origin master
 1. Go to https://marketplace.visualstudio.com/manage
 2. Sign in with Microsoft account
 3. Click "Create publisher"
-4. Choose a unique Publisher ID (e.g., "CORViS" or your name)
+4. Choose a unique Publisher ID (e.g., "xCORViSx" or your name)
 5. Fill in display name and description
 
 ### Step 2: Get Azure DevOps Personal Access Token

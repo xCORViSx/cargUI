@@ -268,13 +268,13 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
         
         item.tooltip = tooltipParts.join('\n');
         
-        // Build description - put 'pub' first, then '(dir)' to separate colors visually
+        // Build description
         let descParts: string[] = [];
-        if (mod.isPublic) {
-            descParts.push('pub');
-        }
         if (mod.isDirectory) {
             descParts.push('(dir)');
+        }
+        if (mod.isPublic) {
+            descParts.push('pub');
         }
         item.description = descParts.join(' ');
         
