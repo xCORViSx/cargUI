@@ -270,6 +270,14 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
         
         // Build description
         let descParts: string[] = [];
+        
+        // Add submodule count if there are children
+        if (hasChildren) {
+            // Count direct children
+            const childCount = mod.children.length;
+            descParts.push(`${childCount}`);
+        }
+        
         if (mod.isDirectory) {
             descParts.push('(dir)');
         }

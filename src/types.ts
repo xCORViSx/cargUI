@@ -49,7 +49,7 @@ export const enum TreeItemContext {
 
 export interface CargoTarget {
     name: string;
-    type: 'bin' | 'example' | 'test' | 'bench';
+    type: 'lib' | 'bin' | 'example' | 'test' | 'bench';
     path?: string;
     requiredFeatures?: string[];
 }
@@ -62,6 +62,7 @@ export interface CargoManifest {
         members?: string[];
         dependencies?: { [key: string]: any };
     };
+    lib?: { name?: string; path?: string };
     bin?: Array<{ name: string; path?: string }>;
     example?: Array<{ name: string; path?: string }>;
     test?: Array<{ name: string; path?: string }>;

@@ -359,6 +359,12 @@
         "icon": "$(go-to-file)"
       },
       {
+        "command": "cargui.viewMemberCargoToml",
+        "title": "View Member's Cargo.toml",
+        "category": "cargUI",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "cargui.viewBinaryTarget",
         "title": "View Target File",
         "category": "cargUI",
@@ -835,6 +841,11 @@
           "command": "cargui.toggleAllWorkspaceMembers",
           "when": "view == cargoTargets && viewItem == workspaceCategory",
           "group": "inline"
+        },
+        {
+          "command": "cargui.viewMemberCargoToml",
+          "when": "view == cargoTargets && viewItem == workspaceMember",
+          "group": "navigation@1"
         },
         {
           "command": "cargui.addArgument",

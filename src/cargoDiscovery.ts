@@ -111,6 +111,31 @@ export function discoverCargoTargets(workspacePath: string, memberPath?: string)
         const cargoTomlContent = fs.readFileSync(cargoTomlPath, 'utf-8');
         const manifest = toml.parse(cargoTomlContent) as CargoManifest;
 
+        // Add explicitly defined library (or default if [lib] section exists)
+        if (manifest.lib) {
+            const lib = manifest.lib as any;
+            const libName = lib.name || manifest.package?.name;
+            const libPath = lib.path || 'src/lib.rs';
+            
+            if (libName) {
+                targets.push({
+                    name: libName,
+                    type: 'lib',
+                    path: libPath
+                });
+            }
+        } else {
+            // Add default library from src/lib.rs only if no [lib] section exists
+            const libPath = path.join(basePath, 'src', 'lib.rs');
+            if (manifest.package?.name && fs.existsSync(libPath)) {
+                targets.push({
+                    name: manifest.package.name,
+                    type: 'lib',
+                    path: 'src/lib.rs'
+                });
+            }
+        }
+
         // Add default binary from src/main.rs if it exists
         const mainPath = path.join(basePath, 'src', 'main.rs');
         if (manifest.package?.name && fs.existsSync(mainPath)) {

@@ -72,7 +72,10 @@ export function buildWithFeature(
         
         // Add target-specific flags
         if (target.type === 'bin') {
-            command += ` --bin ${targetName}`;
+            // Skip --bin for src/main.rs (default binary)
+            if (target.path !== 'src/main.rs') {
+                command += ` --bin ${targetName}`;
+            }
         } else if (target.type === 'example') {
             command += ` --example ${targetName}`;
         } else if (target.type === 'test') {
@@ -109,7 +112,7 @@ export function buildWithFeature(
  */
 export function runCargoTarget(
     targetName: string, 
-    targetType: 'bin' | 'example' | 'test' | 'bench', 
+    targetType: 'lib' | 'bin' | 'example' | 'test' | 'bench', 
     release: boolean, 
     cargoTreeProvider: CargoTreeState,
     requiredFeatures?: string[]
@@ -120,10 +123,19 @@ export function runCargoTarget(
         return;
     }
 
+    // Discover targets to check if this is src/main.rs
+    const allTargets = discoverCargoTargets(workspaceFolder.uri.fsPath);
+    const currentTarget = allTargets.find(t => t.name === targetName && t.type === targetType);
+
     let command = '';
     switch (targetType) {
         case 'bin':
-            command = `cargo run --bin ${targetName}`;
+            // Skip --bin for src/main.rs (default binary)
+            if (currentTarget?.path === 'src/main.rs') {
+                command = 'cargo run';
+            } else {
+                command = `cargo run --bin ${targetName}`;
+            }
             break;
         case 'example':
             command = `cargo run --example ${targetName}`;
@@ -180,7 +192,7 @@ export function runCargoTarget(
  */
 export function buildSingleTarget(
     targetName: string, 
-    targetType: 'bin' | 'example' | 'test' | 'bench', 
+    targetType: 'lib' | 'bin' | 'example' | 'test' | 'bench', 
     release: boolean,
     selectedWorkspaceMember?: string,
     cargoTreeProvider?: CargoTreeState,
@@ -201,9 +213,16 @@ export function buildSingleTarget(
         command += ' --workspace';
     }
     
+    // Discover targets to check if this is src/main.rs
+    const allTargets = discoverCargoTargets(workspaceFolder.uri.fsPath, selectedWorkspaceMember);
+    const currentTarget = allTargets.find(t => t.name === targetName && t.type === targetType);
+    
     // Add target-specific flags
     if (targetType === 'bin') {
-        command += ` --bin ${targetName}`;
+        // Skip --bin for src/main.rs (default binary)
+        if (currentTarget?.path !== 'src/main.rs') {
+            command += ` --bin ${targetName}`;
+        }
     } else if (targetType === 'example') {
         command += ` --example ${targetName}`;
     } else if (targetType === 'test') {
@@ -408,7 +427,10 @@ export async function runCargoCommandOnTargets(
         
         // Add target-specific flags
         if (target.type === 'bin') {
-            command += ` --bin ${targetName}`;
+            // Skip --bin for src/main.rs (default binary)
+            if (target.path !== 'src/main.rs') {
+                command += ` --bin ${targetName}`;
+            }
         } else if (target.type === 'example') {
             command += ` --example ${targetName}`;
         } else if (target.type === 'test') {

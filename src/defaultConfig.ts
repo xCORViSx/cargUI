@@ -97,12 +97,24 @@ export async function initializeDefaultConfig(
             for (const member of workspaceMembers) {
                 const memberTargets = discoverCargoTargets(workspaceFolder.uri.fsPath, member.path);
                 const mainTarget = memberTargets.find(t => t.type === 'bin' && t.path === 'src/main.rs');
+                const libTarget = memberTargets.find(t => t.type === 'lib' && t.path === 'src/lib.rs');
 
                 if (mainTarget) {
                     defaultSnapshots.push({
                         name: 'main',
                         mode: 'debug',
                         targets: [mainTarget.name],
+                        features: [],
+                        arguments: [],
+                        envVars: [],
+                        workspaceMember: member.name,
+                        checkedWorkspaceMembers: []
+                    });
+                } else if (libTarget) {
+                    defaultSnapshots.push({
+                        name: 'lib',
+                        mode: 'debug',
+                        targets: [libTarget.name],
                         features: [],
                         arguments: [],
                         envVars: [],
@@ -125,12 +137,22 @@ export async function initializeDefaultConfig(
         } else {
             const targets = discoverCargoTargets(workspaceFolder.uri.fsPath);
             const mainTarget = targets.find(t => t.type === 'bin' && t.path === 'src/main.rs');
+            const libTarget = targets.find(t => t.type === 'lib' && t.path === 'src/lib.rs');
 
             if (mainTarget) {
                 defaultSnapshots.push({
                     name: 'main',
                     mode: 'debug',
                     targets: [mainTarget.name],
+                    features: [],
+                    arguments: [],
+                    envVars: []
+                });
+            } else if (libTarget) {
+                defaultSnapshots.push({
+                    name: 'lib',
+                    mode: 'debug',
+                    targets: [libTarget.name],
                     features: [],
                     arguments: [],
                     envVars: []

@@ -974,6 +974,30 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 	});
 
+	register('cargui.viewMemberCargoToml', async (item: CargoTreeItem) => {
+		if (!item || !item.workspaceMember || !workspaceFolder) {
+			return;
+		}
+
+		const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+		const member = members.find(m => m.name === item.workspaceMember);
+		
+		if (!member) {
+			vscode.window.showErrorMessage(`Workspace member "${item.workspaceMember}" not found`);
+			return;
+		}
+
+		const cargoTomlPath = path.join(workspaceFolder.uri.fsPath, member.path, 'Cargo.toml');
+		const cargoTomlUri = vscode.Uri.file(cargoTomlPath);
+
+		try {
+			const doc = await vscode.workspace.openTextDocument(cargoTomlUri);
+			await vscode.window.showTextDocument(doc);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to open Cargo.toml: ${error}`);
+		}
+	});
+
 	register('cargui.moveTargetToStandardLocation', async (clickedTarget: CargoTreeItem, selectedTargets?: CargoTreeItem[]) => {
 		if (!workspaceFolder) {
 			return;

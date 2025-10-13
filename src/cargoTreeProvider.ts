@@ -628,7 +628,24 @@ export class CargoTreeDataProvider implements
             }
 
             // MODULES
+            // Count total modules
+            let totalModules = 0;
+            const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+            if (members.length > 1) {
+                // Multi-member workspace - count modules per member
+                for (const member of members) {
+                    const srcPath = path.join(workspaceFolder.uri.fsPath, member.path, 'src');
+                    const modules = detectModules(srcPath);
+                    totalModules += modules.length;
+                }
+            } else {
+                // Single crate - count modules directly
+                const srcPath = path.join(workspaceFolder.uri.fsPath, 'src');
+                const modules = detectModules(srcPath);
+                totalModules = modules.length;
+            }
             const modulesItem = new CargoTreeItem('MODULES', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.ModulesCategory, { iconName: 'package' });
+            modulesItem.description = `${totalModules}`;
             items.push(modulesItem);
 
             // Dependencies
@@ -736,23 +753,27 @@ export class CargoTreeDataProvider implements
             
             // Add individual members (removed "All Members" item - use Check All button instead)
             for (const member of workspaceMembers) {
+                const isSelected = this.selectedWorkspaceMember === member.name;
+                const isDefault = !this.selectedWorkspaceMember && member.isRoot;
+                
+                // Use star-full icon for selected member, otherwise use default icons
+                let iconName = 'package';
+                if (isSelected || isDefault) {
+                    iconName = 'star-full';
+                } else if (member.isRoot) {
+                    iconName = 'home';
+                }
+                
                 const memberItem = new CargoTreeItem(
                     member.name,
                     vscode.TreeItemCollapsibleState.None,
                     TreeItemContext.WorkspaceMember,
                     {
-                        iconName: member.isRoot ? 'home' : 'package',
+                        iconName: iconName,
                         workspaceMember: member.name
                     }
                 );
                 memberItem.tooltip = `Path: ${member.path}\n${member.isRoot ? 'Root package' : 'Member package'}`;
-                
-                // Show selection status in description
-                if (this.selectedWorkspaceMember === member.name) {
-                    memberItem.description = '✓ Selected';
-                } else if (!this.selectedWorkspaceMember && member.isRoot) {
-                    memberItem.description = '✓ Default';
-                }
                 
                 // Make workspace members checkable
                 const isChecked = this.checkedWorkspaceMembers.has(member.name);
@@ -781,22 +802,25 @@ export class CargoTreeDataProvider implements
                 if (members.length > 1) {
                     // Multi-member workspace - show modules per member
                     for (const member of members) {
-                        const srcPath = path.join(member.path, 'src');
+                        const srcPath = path.join(workspaceFolder.uri.fsPath, member.path, 'src');
                         const modules = detectModules(srcPath);
                         
                         if (modules.length > 0) {
                             // Create a member item
+                            const isSelected = this.selectedWorkspaceMember === member.name;
+                            const iconName = isSelected ? 'star-full' : 'package';
                             const memberItem = new CargoTreeItem(
                                 member.name,
                                 vscode.TreeItemCollapsibleState.Collapsed,
                                 TreeItemContext.ModuleMember,
                                 {
-                                    iconName: 'package',
+                                    iconName: iconName,
                                     workspaceMember: member.name,
                                     modules: modules
                                 }
                             );
-                            memberItem.tooltip = `Modules in ${member.name}`;
+                            memberItem.description = `${modules.length}`;
+                            memberItem.tooltip = `Modules in ${member.name}${isSelected ? ' (selected)' : ''}`;
                             items.push(memberItem);
                         }
                     }
@@ -1189,12 +1213,21 @@ export class CargoTreeDataProvider implements
             const allTargets = discoverCargoTargets(workspaceFolder.uri.fsPath, targetMemberPath);
             
             // Count targets by type
+            const libCount = allTargets.filter(t => t.type === 'lib').length;
             const binCount = allTargets.filter(t => t.type === 'bin').length;
             const exampleCount = allTargets.filter(t => t.type === 'example').length;
             const testCount = allTargets.filter(t => t.type === 'test').length;
             const benchCount = allTargets.filter(t => t.type === 'bench').length;
             
             // Add target type subfolders (only if they have items)
+            if (libCount > 0) {
+                const libItem = new CargoTreeItem('Libraries', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.TargetTypeFolder, {
+                    iconName: 'library',
+                    categoryName: 'lib'
+                });
+                libItem.description = `${libCount}`;
+                items.push(libItem);
+            }
             if (binCount > 0) {
                 const binItem = new CargoTreeItem('Binaries', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.TargetTypeFolder, {
                     iconName: 'file-binary',
@@ -1252,7 +1285,7 @@ export class CargoTreeDataProvider implements
             return Promise.resolve(items);
         } else if (element.contextValue === TreeItemContext.TargetTypeFolder) {
             // Show targets of a specific type
-            const targetType = element.categoryName as 'bin' | 'example' | 'test' | 'bench';
+            const targetType = element.categoryName as 'lib' | 'bin' | 'example' | 'test' | 'bench';
             const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
             const targetMemberPath = this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all'
                 ? workspaceMembers.find(m => m.name === this.selectedWorkspaceMember)?.path
@@ -1276,9 +1309,16 @@ export class CargoTreeDataProvider implements
                 
                 // Check if the target name matches the file stem (without extension)
                 const fileStem = filename.replace(/\.rs$/, '');
-                const nameMatchesFile = target.name === fileStem || target.name === 'main';
+                const nameMatchesFile = target.name === fileStem || target.name === 'main' || target.name === 'lib';
                 
-                if (target.type === 'bin') {
+                if (target.type === 'lib') {
+                    // Libraries are always at src/lib.rs (standard location)
+                    if (normalizedPath === 'src/lib.rs') {
+                        return { color: undefined }; // Standard location - no color
+                    } else {
+                        return { color: 'charts.blue' }; // Custom location
+                    }
+                } else if (target.type === 'bin') {
                     if (target.path === 'src/main.rs') {
                         standardLocations = ['src/main.rs'];
                     } else {
@@ -1328,7 +1368,7 @@ export class CargoTreeDataProvider implements
             if (isStandard) {
                 // Target is correctly declared and in standard location
                 // But check if name matches file
-                if (!nameMatchesFile && target.path !== 'src/main.rs') {
+                if (!nameMatchesFile && target.path !== 'src/main.rs' && target.path !== 'src/lib.rs') {
                     return { color: 'charts.orange' }; // Incorrect - name mismatch in standard location
                 }
                 return { color: undefined }; // No color (default)
@@ -1338,10 +1378,13 @@ export class CargoTreeDataProvider implements
             }
         };            return Promise.resolve(targets.map(target => {
                 const isMainTarget = target.type === 'bin' && target.path === 'src/main.rs';
+                const isMainLibrary = target.type === 'lib' && target.path === 'src/lib.rs';
                 const targetStatus = getTargetStatus(target);
                 
                 let icon = 'file';
-                if (target.type === 'bin') {
+                if (target.type === 'lib') {
+                    icon = isMainLibrary ? 'star-full' : 'library';
+                } else if (target.type === 'bin') {
                     icon = isMainTarget ? 'star-full' : 'file-binary';
                 } else if (target.type === 'example') {
                     icon = 'note';
@@ -1360,7 +1403,7 @@ export class CargoTreeDataProvider implements
                         target: target
                     }
                 );
-                item.description = isMainTarget ? 'src/main.rs' : target.path;
+                item.description = (isMainTarget || isMainLibrary) ? target.path : target.path;
                 
                 // Create tooltip with color coding explanation
                 let tooltipText = target.path || target.name;
