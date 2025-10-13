@@ -1,8 +1,8 @@
 {
   "name": "cargUI",
-  "displayName": "cargUI - Cargo GUI",
+  "displayName": "cargUI",
   "description": "Native VSCode UI for Rust projects!",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "xCORViSx",
   "icon": "cargui-icon.png",
   "repository": {
@@ -25,7 +25,7 @@
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
-      "title": "cargUI - Cargo GUI",
+      "title": "cargUI",
       "properties": {
         "cargui.argumentCategories": {
           "type": "array",
