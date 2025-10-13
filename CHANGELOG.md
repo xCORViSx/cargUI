@@ -2,6 +2,46 @@
 
 All notable changes to the cargUI extension will be documented in this file.
 
+## [1.0.2] - 2025-10-13
+
+### 📚 Documentation Update
+
+**Updated:**
+- README now fully documents library target support
+- Added star icon (⭐) indicator documentation for primary targets
+- Documented keyboard shortcut support for library-only crates
+- Clarified auto-selection behavior for both `src/main.rs` and `src/lib.rs`
+- Updated snapshots section to explain both binary and library snapshot creation
+
+### Fixed
+- Added `.DS_Store` to `.gitignore` to prevent publishing issues
+
+---
+
+## [1.0.1] - 2025-10-13
+
+### ✨ Library Target Support
+
+**Added:**
+- **Full library target support** - Auto-detects `src/lib.rs` and `[lib]` sections in Cargo.toml
+- **Keyboard shortcuts now work with library-only crates** - No more broken shortcuts in library projects!
+- **Star icon (⭐) indicators** - Primary targets (`src/main.rs` and `src/lib.rs`) are marked with stars
+- **Auto-selection fallback** - When no targets are checked, commands automatically use `src/lib.rs` if `src/main.rs` doesn't exist
+- **Module counts** - MODULES category and all subcategories now show direct children counts
+- **Submodule counts** - Module counts display at all nesting levels
+- **View Member's Cargo.toml** - New context menu option for workspace members
+
+**Improved:**
+- **Optimized command generation** - Removed redundant `--bin` flags for `src/main.rs` (default binary target)
+- **Library color coding** - `src/lib.rs` no longer shows blue warning (it's the default library path)
+- **Selected member indicator** - Workspace members now show star icon (⭐) for currently selected member
+
+**Fixed:**
+- Duplicate library detection in workspace members
+- Path resolution bug in "View Member's Cargo.toml" command
+
+---
+
 ## [1.0.0] - 2025-10-13
 
 ### 🎉 Major Release - Feature Complete!
