@@ -80,6 +80,10 @@ export class CargoTreeDataProvider implements
         this.selectedWorkspaceMember = member;
     }
 
+    getSelectedWorkspaceMember(): string | undefined {
+        return this.selectedWorkspaceMember;
+    }
+
     setReleaseMode(isRelease: boolean): void {
         this.isReleaseMode = isRelease;
     }
@@ -593,8 +597,22 @@ export class CargoTreeDataProvider implements
             };
             items.push(watchItem);
 
+            // Workspace Members (only show if multi-crate workspace)
+            const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+            const isWorkspace = workspaceMembers.length > 0;
+            
+            // Set context for conditional UI elements
+            vscode.commands.executeCommand('setContext', 'cargui.isWorkspace', isWorkspace);
+
             // Rust Edition indicator
-            const currentEdition = getCurrentEdition(workspaceFolder.uri.fsPath);
+            // For workspaces, show edition of selected member; otherwise show root edition
+            const editionMemberPath = this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all'
+                ? workspaceMembers.find(m => m.name === this.selectedWorkspaceMember)?.path
+                : undefined;
+            const editionPath = editionMemberPath 
+                ? path.join(workspaceFolder.uri.fsPath, editionMemberPath)
+                : workspaceFolder.uri.fsPath;
+            const currentEdition = getCurrentEdition(editionPath);
             if (currentEdition) {
                 const editionItem = new CargoTreeItem(
                     `Edition: ${currentEdition}`,
@@ -610,13 +628,6 @@ export class CargoTreeDataProvider implements
                 };
                 items.push(editionItem);
             }
-
-            // Workspace Members (only show if multi-crate workspace)
-            const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
-            const isWorkspace = workspaceMembers.length > 0;
-            
-            // Set context for conditional UI elements
-            vscode.commands.executeCommand('setContext', 'cargui.isWorkspace', isWorkspace);
             
             if (workspaceMembers.length > 1) {
                 const workspaceLabel = this.selectedWorkspaceMember === 'all' 

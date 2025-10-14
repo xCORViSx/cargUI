@@ -2189,15 +2189,25 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			return;
 		}
 
-		const currentEdition = getCurrentEdition(workspaceFolder.uri.fsPath);
+		// For workspaces, get the path to the selected member's Cargo.toml
+		const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+		const selectedMember = cargoTreeProvider.getSelectedWorkspaceMember();
+		const editionMemberPath = selectedMember && selectedMember !== 'all'
+			? workspaceMembers.find(m => m.name === selectedMember)?.path
+			: undefined;
+		const editionPath = editionMemberPath 
+			? path.join(workspaceFolder.uri.fsPath, editionMemberPath)
+			: workspaceFolder.uri.fsPath;
+
+		const currentEdition = getCurrentEdition(editionPath);
 		if (!currentEdition) {
 			vscode.window.showErrorMessage('Could not read current edition from Cargo.toml');
 			return;
 		}
 
-		const newEdition = await selectEdition(workspaceFolder.uri.fsPath, currentEdition);
+		const newEdition = await selectEdition(editionPath, currentEdition);
 		if (newEdition && newEdition !== currentEdition) {
-			const success = await updateEdition(workspaceFolder.uri.fsPath, newEdition);
+			const success = await updateEdition(editionPath, newEdition);
 			if (success) {
 				cargoTreeProvider.refresh();
 				vscode.window.showInformationMessage(`Rust edition changed to ${newEdition}`);
