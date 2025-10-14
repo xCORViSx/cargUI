@@ -2,7 +2,23 @@
 
 All notable changes to the cargUI extension will be documented in this file.
 
-## [1.0.2] - 2025-10-13
+## [1.0.4] - 2025-10-13
+
+### 🔧 Bug Fix
+
+**Fixed:**
+- **Edition change feature now works correctly in multi-crate workspaces** - Previously tried to update the workspace root's Cargo.toml instead of the selected member's Cargo.toml
+- Edition display now shows the edition of the currently selected workspace member (not just the root)
+- Added `getSelectedWorkspaceMember()` getter method to tree provider
+
+**Technical Details:**
+- The edition feature now checks for `selectedWorkspaceMember` and uses that member's path
+- Properly handles both workspace members and single-crate projects
+- Avoids variable redeclaration issues by reorganizing code flow
+
+---
+
+## [1.0.3] - 2025-10-13
 
 ### 📚 Documentation Update
 
