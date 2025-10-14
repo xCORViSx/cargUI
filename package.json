@@ -2,7 +2,7 @@
   "name": "cargUI",
   "displayName": "cargUI",
   "description": "Native VSCode UI for Rust projects!",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publisher": "xCORViSx",
   "icon": "cargui-icon.png",
   "repository": {
