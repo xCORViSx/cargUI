@@ -103,6 +103,70 @@ export async function moveTargetToStandardLocation(
 }
 
 /**
+ * Removes duplicate/ambiguous dependency constraints from Cargo.toml files.
+ * Keeps the first occurrence, removes subsequent ones.
+ * Also normalizes ambiguous version specifiers like "=1.0" to prevent Cargo errors.
+ */
+export function removeDuplicateDependencies(cargoTomlPath: string, depNames: Set<string>): void {
+    if (!fs.existsSync(cargoTomlPath)) {
+        return;
+    }
+
+    const content = fs.readFileSync(cargoTomlPath, 'utf-8');
+    const lines = content.split('\n');
+    let currentSection: string | null = null;
+    const seenDeps = new Map<string, number>(); // depName -> first line index
+    const linesToRemove = new Set<number>();
+    let modified = false;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        // Track which section we're in
+        if (trimmed.startsWith('[')) {
+            const sectionMatch = trimmed.match(/\[([^\]]+)\]/);
+            if (sectionMatch) {
+                currentSection = sectionMatch[1];
+            }
+            continue;
+        }
+
+        // Skip if not in a dependency section
+        if (!currentSection || !['dependencies', 'dev-dependencies', 'build-dependencies', 'workspace.dependencies'].includes(currentSection)) {
+            continue;
+        }
+
+        // Check if this line defines one of our dependencies
+        for (const depName of depNames) {
+            const normalizedDepName = depName.replace(/_/g, '-');
+            const normalizedLineName = trimmed.split(/\s*=/)[0].trim().replace(/_/g, '-');
+
+            if (normalizedLineName === normalizedDepName) {
+                if (seenDeps.has(depName)) {
+                    // This is a duplicate - mark it for removal
+                    linesToRemove.add(i);
+                    // Also remove the next line if it's part of a multi-line entry
+                    if (i + 1 < lines.length && lines[i + 1].trim().startsWith('}')) {
+                        linesToRemove.add(i + 1);
+                    }
+                } else {
+                    // First occurrence - keep it
+                    seenDeps.set(depName, i);
+                }
+                break;
+            }
+        }
+    }
+
+    // If we found duplicates or made modifications, update the file
+    if (linesToRemove.size > 0 || modified) {
+        const newLines = lines.filter((_, i) => !linesToRemove.has(i));
+        fs.writeFileSync(cargoTomlPath, newLines.join('\n'), 'utf-8');
+    }
+}
+
+/**
  * Updates dependency versions in a Cargo.toml file.
  * Handles both simple string versions and complex dependency objects.
  */

@@ -605,14 +605,8 @@ export class CargoTreeDataProvider implements
             vscode.commands.executeCommand('setContext', 'cargui.isWorkspace', isWorkspace);
 
             // Rust Edition indicator
-            // For workspaces, show edition of selected member; otherwise show root edition
-            const editionMemberPath = this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all'
-                ? workspaceMembers.find(m => m.name === this.selectedWorkspaceMember)?.path
-                : undefined;
-            const editionPath = editionMemberPath 
-                ? path.join(workspaceFolder.uri.fsPath, editionMemberPath)
-                : workspaceFolder.uri.fsPath;
-            const currentEdition = getCurrentEdition(editionPath);
+            // Always use workspace root for edition (multi-crate workspaces use [workspace.package])
+            const currentEdition = getCurrentEdition(workspaceFolder.uri.fsPath);
             if (currentEdition) {
                 const editionItem = new CargoTreeItem(
                     `Edition: ${currentEdition}`,
@@ -785,6 +779,10 @@ export class CargoTreeDataProvider implements
                     }
                 );
                 memberItem.tooltip = `Path: ${member.path}\n${member.isRoot ? 'Root package' : 'Member package'}`;
+                // Show relative path for non-root members
+                if (!member.isRoot && member.path && member.path !== '.') {
+                    memberItem.description = member.path;
+                }
                 
                 // Make workspace members checkable
                 const isChecked = this.checkedWorkspaceMembers.has(member.name);
@@ -792,10 +790,10 @@ export class CargoTreeDataProvider implements
                     ? vscode.TreeItemCheckboxState.Checked 
                     : vscode.TreeItemCheckboxState.Unchecked;
                 
-                // Clicking the label selects the member (changes context)
+                // Clicking the label toggles the member selection (select/deselect)
                 memberItem.command = {
-                    command: 'cargui.selectWorkspaceMember',
-                    title: 'Select Workspace Member',
+                    command: 'cargui.toggleWorkspaceMember',
+                    title: 'Toggle Workspace Member',
                     arguments: [member.name]
                 };
                 items.push(memberItem);
@@ -811,28 +809,40 @@ export class CargoTreeDataProvider implements
                 const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
                 
                 if (members.length > 1) {
-                    // Multi-member workspace - show modules per member
-                    for (const member of members) {
-                        const srcPath = path.join(workspaceFolder.uri.fsPath, member.path, 'src');
-                        const modules = detectModules(srcPath);
-                        
-                        if (modules.length > 0) {
-                            // Create a member item
-                            const isSelected = this.selectedWorkspaceMember === member.name;
-                            const iconName = isSelected ? 'star-full' : 'package';
-                            const memberItem = new CargoTreeItem(
-                                member.name,
-                                vscode.TreeItemCollapsibleState.Collapsed,
-                                TreeItemContext.ModuleMember,
-                                {
-                                    iconName: iconName,
-                                    workspaceMember: member.name,
-                                    modules: modules
-                                }
-                            );
-                            memberItem.description = `${modules.length}`;
-                            memberItem.tooltip = `Modules in ${member.name}${isSelected ? ' (selected)' : ''}`;
-                            items.push(memberItem);
+                    // Multi-member workspace
+                    
+                    // If a specific member is selected, show only that member's modules
+                    if (this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all') {
+                        const selectedMember = members.find(m => m.name === this.selectedWorkspaceMember);
+                        if (selectedMember) {
+                            const srcPath = path.join(workspaceFolder.uri.fsPath, selectedMember.path, 'src');
+                            const modules = detectModules(srcPath);
+                            if (modules.length > 0) {
+                                items.push(...buildModuleTree(modules, this.selectedWorkspaceMember, this.decorationProvider));
+                            }
+                        }
+                    } else {
+                        // Show modules per member (grouped by member)
+                        for (const member of members) {
+                            const srcPath = path.join(workspaceFolder.uri.fsPath, member.path, 'src');
+                            const modules = detectModules(srcPath);
+                            
+                            if (modules.length > 0) {
+                                // Create a member item
+                                const memberItem = new CargoTreeItem(
+                                    member.name,
+                                    vscode.TreeItemCollapsibleState.Collapsed,
+                                    TreeItemContext.ModuleMember,
+                                    {
+                                        iconName: 'package',
+                                        workspaceMember: member.name,
+                                        modules: modules
+                                    }
+                                );
+                                memberItem.description = `${modules.length}`;
+                                memberItem.tooltip = `Modules in ${member.name}`;
+                                items.push(memberItem);
+                            }
                         }
                     }
                 } else {
@@ -1174,10 +1184,15 @@ export class CargoTreeDataProvider implements
             // WORKSPACE subfolder (always present if workspace deps exist)
             if (dependencies.workspace.length > 0) {
                 const workspaceItem = new CargoTreeItem('WORKSPACE', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.DependencyTypeFolderWorkspace, {
-                    iconName: 'package',
+                    iconName: 'star-full',
                     categoryName: 'workspace'
                 });
                 workspaceItem.description = `${dependencies.workspace.length}`;
+                // Color workspace category yellow
+                workspaceItem.resourceUri = vscode.Uri.parse(`cargui-dep:workspace-category`);
+                if (this.decorationProvider) {
+                    this.decorationProvider.markAsInherited('workspace-category');
+                }
                 items.push(workspaceItem);
             }
             
@@ -1428,6 +1443,11 @@ export class CargoTreeDataProvider implements
                 item.tooltip = tooltipText;
                 item.target = target;
                 
+                // Store workspace member name if this target belongs to a member
+                if (this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all') {
+                    item.workspaceMember = this.selectedWorkspaceMember;
+                }
+                
                 // Set resourceUri for file decoration (enables text coloring like dependencies)
                 item.resourceUri = vscode.Uri.parse(`cargui-target:${target.name}`);
                 
@@ -1532,14 +1552,22 @@ export class CargoTreeDataProvider implements
                     tooltip += ' (optional)';
                 }
                 
+                // Determine icon - use star for inherited deps, package otherwise
+                let iconName = 'package';
+                if (dep.inherited && depType !== 'workspace') {
+                    iconName = 'star-full';
+                    tooltip += ' (from workspace)';
+                }
+                
                 const item = new CargoTreeItem(
                     label,
                     vscode.TreeItemCollapsibleState.None,
                     TreeItemContext.Dependency,
-                    { dependency: dep }
+                    { dependency: dep, iconName: iconName }
                 );
                 item.description = description;
                 item.tooltip = tooltip;
+                item.isInherited = dep.inherited && depType !== 'workspace';
                 
                 // Set click command to view dependency in Cargo.toml
                 item.command = {
@@ -1563,7 +1591,14 @@ export class CargoTreeDataProvider implements
                     : vscode.TreeItemCheckboxState.Unchecked;
                 
                 return item;
-            })).then(promises => Promise.all(promises));
+            })).then(promises => Promise.all(promises).then(items => {
+                // Sort: inherited deps (with stars) go to top
+                return items.sort((a, b) => {
+                    const aIsInherited = a.isInherited ? 1 : 0;
+                    const bIsInherited = b.isInherited ? 1 : 0;
+                    return bIsInherited - aIsInherited; // Inherited (1) comes before normal (0)
+                });
+            }));
         } else if (element.contextValue === TreeItemContext.UnknownsFolder) {
             // Show unregistered targets
             const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);

@@ -22,7 +22,8 @@ import {
 } from './cargoDiscovery';
 import {
 	moveTargetToStandardLocation,
-	updateDependencyVersions
+	updateDependencyVersions,
+	removeDuplicateDependencies
 } from './cargoToml';
 import {
 	fetchCrateMetadata,
@@ -877,10 +878,36 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			return;
 		}
 
-		if (memberName === 'all') {
+		// Toggle: if already selected, deselect (go to 'all')
+		if (state.selectedWorkspaceMember === memberName) {
+			state.selectedWorkspaceMember = 'all';
+			vscode.window.showInformationMessage('Deselected workspace member - showing all members');
+		} else if (memberName === 'all') {
 			state.selectedWorkspaceMember = 'all';
 			vscode.window.showInformationMessage('Selected: All workspace members (--workspace)');
 		} else {
+			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+			const member = members.find(m => m.name === memberName);
+			if (member) {
+				state.selectedWorkspaceMember = memberName;
+				vscode.window.showInformationMessage(`Selected workspace member: ${memberName}`);
+			}
+		}
+
+		cargoTreeProvider.refresh();
+	});
+
+	register('cargui.toggleWorkspaceMember', (memberName: string) => {
+		if (!workspaceFolder) {
+			return;
+		}
+
+		// If clicking the same member that's already selected, deselect it
+		if (state.selectedWorkspaceMember === memberName) {
+			state.selectedWorkspaceMember = undefined;
+			vscode.window.showInformationMessage(`Deselected workspace member: ${memberName}`);
+		} else {
+			// Otherwise select the new member
 			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
 			const member = members.find(m => m.name === memberName);
 			if (member) {
@@ -945,7 +972,8 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
 			const member = members.find(m => m.name === target.workspaceMember);
 			if (member) {
-				basePath = member.path;
+				// Construct absolute path: workspace root + member relative path
+				basePath = path.join(workspaceFolder.uri.fsPath, member.path);
 			}
 		}
 
@@ -2189,15 +2217,8 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			return;
 		}
 
-		// For workspaces, get the path to the selected member's Cargo.toml
-		const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
-		const selectedMember = cargoTreeProvider.getSelectedWorkspaceMember();
-		const editionMemberPath = selectedMember && selectedMember !== 'all'
-			? workspaceMembers.find(m => m.name === selectedMember)?.path
-			: undefined;
-		const editionPath = editionMemberPath 
-			? path.join(workspaceFolder.uri.fsPath, editionMemberPath)
-			: workspaceFolder.uri.fsPath;
+		// Always use workspace root for edition (multi-crate workspaces use [workspace.package])
+		const editionPath = workspaceFolder.uri.fsPath;
 
 		const currentEdition = getCurrentEdition(editionPath);
 		if (!currentEdition) {
@@ -2636,7 +2657,11 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
 		const members = discoverWorkspaceMembers(workspace.uri.fsPath);
 		let cargoTomlPath: string;
-		if (state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all') {
+		
+		// Workspace dependencies are always in the root, regardless of selected member
+		if (dep.type === 'workspace') {
+			cargoTomlPath = path.join(workspace.uri.fsPath, 'Cargo.toml');
+		} else if (state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all') {
 			const member = members.find(m => m.name === state.selectedWorkspaceMember);
 			if (!member) {
 				vscode.window.showErrorMessage('Selected workspace member not found');
@@ -3012,14 +3037,36 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			}
 		}
 
+		// Remove duplicate/ambiguous dependency constraints before updating
+		const depNames = new Set(versionChoices.keys());
+		removeDuplicateDependencies(workspaceCargoToml, depNames);
+		if (memberCargoToml && fs.existsSync(memberCargoToml)) {
+			removeDuplicateDependencies(memberCargoToml, depNames);
+		}
+
 		await updateDependencyVersions(workspaceCargoToml, versionChoices);
 		if (memberCargoToml && fs.existsSync(memberCargoToml)) {
 			await updateDependencyVersions(memberCargoToml, versionChoices);
 		}
 
-		let command = 'cargo update';
+		// Remove Cargo.lock to clear any stale dependency resolution
+		const lockFilePath = path.join(workspace.uri.fsPath, 'Cargo.lock');
+		if (fs.existsSync(lockFilePath)) {
+			try {
+				fs.unlinkSync(lockFilePath);
+			} catch (error) {
+				console.warn(`Could not remove Cargo.lock: ${error}`);
+			}
+		}
+
+		// Cargo doesn't support multiple --precise flags in one command
+		// Run separate commands for each dependency
+		const commands: string[] = [];
+		const commandToDepName = new Map<string, string>();
 		versionChoices.forEach((info, depName) => {
-			command += ` -p ${depName} --precise ${info.version}`;
+			const cmd = `cargo update -p ${depName} --precise ${info.version}`;
+			commands.push(cmd);
+			commandToDepName.set(cmd, depName);
 		});
 
 		const terminal = vscode.window.createTerminal({
@@ -3027,35 +3074,72 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			cwd: workspace.uri.fsPath
 		});
 		terminal.show();
-		terminal.sendText(command);
+		commands.forEach(cmd => terminal.sendText(cmd));
 
 		try {
 			const result = await vscode.window.withProgress({
 				location: vscode.ProgressLocation.Notification,
 				title: `Changing version for ${versionChoices.size} dependencies...`,
 				cancellable: false
-			}, () => {
-				return new Promise<{ success: boolean; output: string }>(resolve => {
-					const { exec } = require('child_process');
-					exec(command, { cwd: workspace.uri.fsPath, maxBuffer: 1024 * 1024 * 10 }, (error: any, stdout: string, stderr: string) => {
-						const output = `${stdout}${stderr}`;
-						const hasError = Boolean(error) ||
-							output.includes('error: ') ||
-							output.includes('error[') ||
-							output.includes('failed to select') ||
-							output.includes('could not compile') ||
-							output.includes('could not find');
-						resolve({ success: !hasError, output });
+			}, async () => {
+				const { exec } = require('child_process');
+				const failedDeps = new Set<string>();
+				let combinedOutput = '';
+
+				// Execute each command sequentially and track failures
+				for (const command of commands) {
+					await new Promise<void>((resolve) => {
+						exec(command, { cwd: workspace.uri.fsPath, maxBuffer: 1024 * 1024 * 10 }, (error: any, stdout: string, stderr: string) => {
+							const output = `${stdout}${stderr}`;
+							combinedOutput += output + '\n';
+							const hasError = Boolean(error) ||
+								output.includes('error: ') ||
+								output.includes('error[') ||
+								output.includes('failed to select') ||
+								output.includes('could not compile') ||
+								output.includes('could not find');
+							if (hasError) {
+								const depName = commandToDepName.get(command);
+								if (depName) {
+									failedDeps.add(depName);
+								}
+							}
+							resolve();
+						});
 					});
-				});
+				}
+
+				return { failedDeps, output: combinedOutput };
 			});
 
-			if (!result.success) {
-				await updateDependencyVersions(workspaceCargoToml, originalVersions);
-				if (memberCargoToml && fs.existsSync(memberCargoToml)) {
-					await updateDependencyVersions(memberCargoToml, originalVersions);
+			// Only revert versions for failed dependencies
+			if (result.failedDeps.size > 0) {
+				const failedVersionChoices = new Map(versionChoices);
+				result.failedDeps.forEach(depName => {
+					failedVersionChoices.delete(depName);
+				});
+
+				// Revert only the failed ones
+				const revertMap = new Map<string, { version: string; type: string }>();
+				result.failedDeps.forEach(depName => {
+					const original = originalVersions.get(depName);
+					if (original) {
+						revertMap.set(depName, original);
+					}
+				});
+
+				if (revertMap.size > 0) {
+					await updateDependencyVersions(workspaceCargoToml, revertMap);
+					if (memberCargoToml && fs.existsSync(memberCargoToml)) {
+						await updateDependencyVersions(memberCargoToml, revertMap);
+					}
 				}
-				vscode.window.showWarningMessage('Dependencies reverted to original versions due to version change failure');
+
+				const failedNames = Array.from(result.failedDeps).join(', ');
+				const successCount = versionChoices.size - result.failedDeps.size;
+				vscode.window.showWarningMessage(
+					`${successCount} dependencies updated successfully, but ${result.failedDeps.size} failed: ${failedNames}`
+				);
 			} else {
 				cargoTreeProvider.refresh();
 				vscode.window.showInformationMessage(`Successfully changed version for ${versionChoices.size} dependencies`);

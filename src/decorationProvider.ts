@@ -9,9 +9,16 @@ export class DependencyDecorationProvider implements vscode.FileDecorationProvid
     readonly onDidChangeFileDecorations = this._onDidChangeFileDecorations.event;
     
     private latestDependencies = new Set<string>();
+    private inheritedDependencies = new Set<string>(); // Dependencies inherited from workspace
     private targetColors = new Map<string, string>(); // Map target/rustup name to color
     
     provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
+        if (uri.scheme === 'cargui-dep' && this.inheritedDependencies.has(uri.path)) {
+            return {
+                color: new vscode.ThemeColor('charts.yellow'),
+                tooltip: 'Inherited from workspace'
+            };
+        }
         if (uri.scheme === 'cargui-dep' && this.latestDependencies.has(uri.path)) {
             return {
                 color: new vscode.ThemeColor('charts.green'),
@@ -38,6 +45,16 @@ export class DependencyDecorationProvider implements vscode.FileDecorationProvid
         this.latestDependencies.delete(depName);
         this._onDidChangeFileDecorations.fire(vscode.Uri.parse(`cargui-dep:${depName}`));
     }
+
+    markAsInherited(depName: string) {
+        this.inheritedDependencies.add(depName);
+        this._onDidChangeFileDecorations.fire(vscode.Uri.parse(`cargui-dep:${depName}`));
+    }
+    
+    clearInherited(depName: string) {
+        this.inheritedDependencies.delete(depName);
+        this._onDidChangeFileDecorations.fire(vscode.Uri.parse(`cargui-dep:${depName}`));
+    }
     
     setTargetColor(targetName: string, color: string | undefined) {
         if (color) {
@@ -50,6 +67,7 @@ export class DependencyDecorationProvider implements vscode.FileDecorationProvid
     
     refresh() {
         this.latestDependencies.clear();
+        this.inheritedDependencies.clear();
         this._onDidChangeFileDecorations.fire(undefined as any);
     }
 }

@@ -38,6 +38,7 @@ export class CargoTreeItem extends vscode.TreeItem {
     public modules?: ModuleInfo[];
     public moduleInfo?: ModuleInfo;
     public unknownData?: UnregisteredItem;
+    public isInherited?: boolean;
 
     constructor(
         public readonly label: string,
@@ -63,7 +64,16 @@ export class CargoTreeItem extends vscode.TreeItem {
             this.unknownData = options.unknownData;
             
             if (options.iconName) {
-                this.iconPath = new vscode.ThemeIcon(options.iconName);
+                // For workspace category, use yellow-colored star
+                if (options.iconName === 'star-full' && contextValue === 'dependencyTypeFolder-workspace') {
+                    this.iconPath = new vscode.ThemeIcon(options.iconName, new vscode.ThemeColor('charts.yellow'));
+                }
+                // For inherited member dependencies, use yellow-colored star
+                else if (options.iconName === 'star-full' && contextValue === 'dependency' && options.dependency?.inherited) {
+                    this.iconPath = new vscode.ThemeIcon(options.iconName, new vscode.ThemeColor('charts.yellow'));
+                } else {
+                    this.iconPath = new vscode.ThemeIcon(options.iconName);
+                }
             }
         }
         

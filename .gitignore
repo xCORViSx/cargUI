@@ -1,33 +1,24 @@
-# VS Code Extension
+# Ignore everything by default
+*
+
+# But include these files/directories (whitelist approach)
+!.gitignore
+!.github/
+!src/
+!package.json
+!package-lock.json
+!tsconfig.json
+!README.md
+!CHANGELOG.md
+!LICENSE
+!CONTRIBUTING.md
+
+# Still ignore these even if they'd match broad patterns
 node_modules/
 out/
 *.vsix
 .vscode-test/
-
-# Demo Projects (for local testing)
-cargui-demo/
-cargui-demo-single/
-cacao/
-
-# OS
+test-projs/
 .DS_Store
-Thumbs.db
-
-# IDE
-.idea/
-*.swp
-*.swo
-*~
-
-# Logs
 *.log
-npm-debug.log*
-
-# Misc
-.env
-.env.local
-
-# Internal docs
-NEXT_STEPS.md
-PUBLISHING_GUIDE.md
 

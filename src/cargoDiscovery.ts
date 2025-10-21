@@ -356,8 +356,8 @@ export function discoverCargoFeatures(workspacePath: string, memberPath?: string
  * Helper function to parse dependency values from Cargo.toml.
  * Handles both simple string versions and complex dependency objects.
  */
-function parseDependencyValue(name: string, value: any, type: 'workspace' | 'production' | 'dev' | 'build'): Dependency {
-    const dep: Dependency = { name, type };
+function parseDependencyValue(name: string, value: any, type: 'workspace' | 'production' | 'dev' | 'build', isInherited: boolean = false): Dependency {
+    const dep: Dependency = { name, type, inherited: isInherited };
     
     // Helper function to normalize version strings by removing requirement operators
     const normalizeVersion = (version: string): string => {
@@ -378,6 +378,10 @@ function parseDependencyValue(name: string, value: any, type: 'workspace' | 'pro
         if (value.tag) dep.tag = value.tag;
         if (value.rev) dep.rev = value.rev;
         if (value.optional) dep.optional = value.optional;
+        // Check if this is inheriting from workspace
+        if (value.workspace === true) {
+            dep.inherited = true;
+        }
     }
     
     return dep;
@@ -409,7 +413,7 @@ export function discoverCargoDependencies(workspacePath: string, memberPath?: st
             
             if (rootManifest.workspace?.dependencies) {
                 for (const [name, value] of Object.entries(rootManifest.workspace.dependencies)) {
-                    result.workspace.push(parseDependencyValue(name, value, 'workspace'));
+                    result.workspace.push(parseDependencyValue(name, value, 'workspace', false));
                 }
             }
             
@@ -451,24 +455,50 @@ export function discoverCargoDependencies(workspacePath: string, memberPath?: st
                 const content = fs.readFileSync(cargoTomlPath, 'utf-8');
                 const manifest = toml.parse(content) as CargoManifest;
                 
+                // Build a map of workspace dependency versions for quick lookup
+                const workspaceDeps = new Map<string, string>();
+                result.workspace.forEach(dep => {
+                    if (dep.version) {
+                        workspaceDeps.set(dep.name, dep.version);
+                    }
+                });
+                
                 // Production dependencies
                 if (manifest.dependencies) {
                     for (const [name, value] of Object.entries(manifest.dependencies)) {
-                        result.production.push(parseDependencyValue(name, value, 'production'));
+                        const dep = parseDependencyValue(name, value, 'production');
+                        // If this dependency inherits from workspace but doesn't have a version,
+                        // copy the version from workspace dependencies
+                        if (dep.inherited && !dep.version && workspaceDeps.has(name)) {
+                            dep.version = workspaceDeps.get(name);
+                        }
+                        result.production.push(dep);
                     }
                 }
                 
                 // Dev dependencies
                 if (manifest['dev-dependencies']) {
                     for (const [name, value] of Object.entries(manifest['dev-dependencies'])) {
-                        result.dev.push(parseDependencyValue(name, value, 'dev'));
+                        const dep = parseDependencyValue(name, value, 'dev');
+                        // If this dependency inherits from workspace but doesn't have a version,
+                        // copy the version from workspace dependencies
+                        if (dep.inherited && !dep.version && workspaceDeps.has(name)) {
+                            dep.version = workspaceDeps.get(name);
+                        }
+                        result.dev.push(dep);
                     }
                 }
                 
                 // Build dependencies
                 if (manifest['build-dependencies']) {
                     for (const [name, value] of Object.entries(manifest['build-dependencies'])) {
-                        result.build.push(parseDependencyValue(name, value, 'build'));
+                        const dep = parseDependencyValue(name, value, 'build');
+                        // If this dependency inherits from workspace but doesn't have a version,
+                        // copy the version from workspace dependencies
+                        if (dep.inherited && !dep.version && workspaceDeps.has(name)) {
+                            dep.version = workspaceDeps.get(name);
+                        }
+                        result.build.push(dep);
                     }
                 }
             } catch (error) {

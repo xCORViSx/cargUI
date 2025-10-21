@@ -84,6 +84,7 @@ export interface Dependency {
     rev?: string;
     optional?: boolean;
     type?: 'workspace' | 'production' | 'dev' | 'build';
+    inherited?: boolean; // True if inherited from workspace
 }
 
 export interface WorkspaceMember {

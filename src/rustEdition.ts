@@ -36,6 +36,7 @@ export async function getAvailableEditions(): Promise<string[]> {
 
 /**
  * Reads the current Rust edition from Cargo.toml
+ * Checks both [package] and [workspace.package] sections
  */
 export function getCurrentEdition(workspacePath: string): string | undefined {
     const cargoTomlPath = path.join(workspacePath, 'Cargo.toml');
@@ -48,10 +49,16 @@ export function getCurrentEdition(workspacePath: string): string | undefined {
         const cargoTomlContent = fs.readFileSync(cargoTomlPath, 'utf-8');
         const parsed = toml.parse(cargoTomlContent);
         
-        // Check package.edition
-        const edition = (parsed.package as any)?.edition;
-        if (edition) {
-            return String(edition);
+        // First check [workspace.package] for multi-crate workspaces
+        const workspacePackageEdition = (parsed.workspace as any)?.package?.edition;
+        if (workspacePackageEdition) {
+            return String(workspacePackageEdition);
+        }
+        
+        // Then check [package] for single-crate projects
+        const packageEdition = (parsed.package as any)?.edition;
+        if (packageEdition && typeof packageEdition !== 'object') {
+            return String(packageEdition);
         }
         
         // Default to 2015 if not specified
@@ -64,6 +71,7 @@ export function getCurrentEdition(workspacePath: string): string | undefined {
 
 /**
  * Updates the Rust edition in Cargo.toml
+ * Handles both [package] and [workspace.package] sections
  */
 export async function updateEdition(workspacePath: string, newEdition: string): Promise<boolean> {
     const cargoTomlPath = path.join(workspacePath, 'Cargo.toml');
@@ -77,27 +85,45 @@ export async function updateEdition(workspacePath: string, newEdition: string): 
         let cargoTomlContent = fs.readFileSync(cargoTomlPath, 'utf-8');
         const parsed = toml.parse(cargoTomlContent);
         
-        // Update edition in parsed object
-        if (!parsed.package) {
-            vscode.window.showErrorMessage('No [package] section found in Cargo.toml');
-            return false;
-        }
+        // Check if this has [workspace.package] section (multi-crate workspace)
+        const hasWorkspacePackage = (parsed.workspace as any)?.package;
         
-        (parsed.package as any).edition = newEdition;
-        
-        // Write back to file - preserve formatting by doing string replacement
-        const editionRegex = /^(\s*edition\s*=\s*)(["']?\d{4}["']?)/m;
-        
-        if (editionRegex.test(cargoTomlContent)) {
-            // Replace existing edition
-            cargoTomlContent = cargoTomlContent.replace(editionRegex, `$1"${newEdition}"`);
+        if (hasWorkspacePackage) {
+            // Update [workspace.package] section
+            // Look for edition under [workspace.package]
+            const workspacePackageRegex = /(\[workspace\.package\][^\[]*)edition\s*=\s*["']?\d{4}["']?/;
+            
+            if (workspacePackageRegex.test(cargoTomlContent)) {
+                // Replace existing edition in [workspace.package]
+                cargoTomlContent = cargoTomlContent.replace(
+                    /(\[workspace\.package\][^\[]*)edition\s*=\s*["']?\d{4}["']?/,
+                    `$1edition = "${newEdition}"`
+                );
+            } else {
+                // Add edition to [workspace.package]
+                cargoTomlContent = cargoTomlContent.replace(
+                    /(\[workspace\.package\][^\[]*)/,
+                    `$1edition = "${newEdition}"\n`
+                );
+            }
+        } else if (parsed.package) {
+            // Single-crate project - update [package] section
+            const editionRegex = /^(\s*edition\s*=\s*)(["']?\d{4}["']?)/m;
+            
+            if (editionRegex.test(cargoTomlContent)) {
+                // Replace existing edition
+                cargoTomlContent = cargoTomlContent.replace(editionRegex, `$1"${newEdition}"`);
+            } else {
+                // Add edition after package section
+                const packageSectionRegex = /(\[package\][^\[]*)/;
+                cargoTomlContent = cargoTomlContent.replace(
+                    packageSectionRegex,
+                    `$1edition = "${newEdition}"\n`
+                );
+            }
         } else {
-            // Add edition after package name or version
-            const packageSectionRegex = /(\[package\][^\[]*)/;
-            cargoTomlContent = cargoTomlContent.replace(
-                packageSectionRegex,
-                `$1edition = "${newEdition}"\n`
-            );
+            vscode.window.showErrorMessage('No [package] or [workspace.package] section found in Cargo.toml');
+            return false;
         }
         
         fs.writeFileSync(cargoTomlPath, cargoTomlContent, 'utf-8');

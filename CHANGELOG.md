@@ -2,6 +2,68 @@
 
 All notable changes to the cargUI extension will be documented in this file.
 
+## [1.0.5] - 2025-10-21
+
+### ✨ New Features & Improvements
+
+**Workspace Interaction:**
+- **Clickable member deselection** - Workspace members can now be clicked again to deselect them (return to "all" view)
+- **Context-aware module display** - When a workspace member is selected, MODULES category shows only that member's modules
+- **Workspace member path display** - Non-root workspace members now show their relative directory path as description
+
+**Dependency Visualization:**
+- **Workspace-inherited dependency improvements**:
+  - Dependencies inherited from workspace (`{ workspace = true }`) now show correct version numbers in member categories
+  - Inherited dependencies display with yellow star (⭐) icons and are sorted to the top of their category lists
+  - WORKSPACE category name displays with yellow star icon
+  - Can still turn green when at latest version (latest takes priority over inherited coloring)
+  - Tooltip shows "(from workspace)" for inherited dependencies
+
+**Version Change Resilience:**
+- **Selective reversion on failures** - When changing multiple dependency versions, only failed updates are reverted (successful ones persist)
+- **Automatic duplicate resolution** - Removes duplicate/ambiguous dependency constraints before version changes
+- **Lock file refresh** - Deletes `Cargo.lock` before version updates to ensure clean dependency resolution
+- **Better error handling** - Clear feedback showing which dependencies succeeded vs failed
+
+**Development:**
+- **Simplified .gitignore** - Switched to whitelist approach (ignore everything, then explicitly include needed files)
+
+### 🔧 Bug Fixes
+
+**Fixed:**
+- **Workspace member targets now open correctly** - Fixed path resolution when opening target files from workspace members
+- **Workspace dependency clicking** - Clicking workspace dependencies now correctly opens root `Cargo.toml` at `[workspace.dependencies]` section
+- **Module detection accuracy** - Fixed false positive detection of workspace member packages as modules
+- **Edition feature now always updates workspace root** - No longer member-sensitive
+- **Multi-dependency version updates** - Fixed `cargo update` with multiple precise versions
+
+### 🔧 Bug Fixes & Improvements
+
+**Fixed:**
+- **Workspace member targets now open correctly** - Fixed path resolution when opening target files from workspace members
+  - Tree items for workspace member targets now properly store the member name
+  - Constructs correct absolute paths: `workspace_root + member_path + target_path`
+  - All target types (binaries, libraries, examples, tests, benchmarks) now work in multi-crate workspaces
+
+**Improved:**
+- **Edition feature now always updates workspace root** - No longer member-sensitive
+  - Multi-crate workspaces always update `[workspace.package]` edition section
+  - Single-crate projects update `[package]` edition section
+  - Handles workspace inheritance properly with helpful UI guidance
+
+- **Multi-dependency version updates** - Fixed `cargo update` with multiple precise versions
+  - Now runs separate `cargo update -p <dep> --precise <version>` commands sequentially
+  - Prevents "cannot use multiple times" Cargo error
+  - Shows all commands in terminal for transparency
+
+**Technical Details:**
+- Added `workspaceMember` property to target tree items when created from workspace members
+- Updated `viewBinaryTarget` command to properly construct absolute paths for member targets
+- Edition feature detects and handles `[workspace.package]` sections correctly
+- Multi-dependency updates execute commands sequentially with proper error tracking
+
+---
+
 ## [1.0.4] - 2025-10-13
 
 ### 🔧 Bug Fix
