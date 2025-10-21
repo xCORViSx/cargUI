@@ -114,12 +114,11 @@ Follows Rust best practices automatically!
 <details>
 <summary><b>Dependency Management</b> - Track versions and update status</summary>
 
-**Version tracking:**
-- 🟢 Green = Latest version (up to date!)
-- 🟡 Yellow = Update available
-- 🔵 Blue = Workspace dependency  
-- 🟠 Orange = Git/path dependency
-- ⭐ **Yellow star** = Workspace-inherited dependency (v1.0.5)
+**Visual indicators:**
+- 🟢 **Green text** = Latest version (up to date!)
+- ⭐ **Yellow star icon** = Workspace-inherited dependency (v1.0.5)
+- � **Package icon** = Standard dependency with version number shown
+- **Git/path dependencies** show "git" or path as description
 
 **Organized by type:**
 - **Production** - Runtime dependencies
@@ -665,32 +664,6 @@ cargUI/
 
 ---
 
-## 🚀 Project Status
-
-**Current Version: 1.0.5 - Production Ready**
-
-Core features:
-
-✅ Smart detection for unregistered targets
-✅ Module visualization with health indicators & counts
-✅ Dependency version tracking with workspace inheritance support
-✅ Rustup integration
-✅ Rust edition selector
-✅ Hierarchical organization (categories/subcategories)
-✅ Mixed organization (categorized + uncategorized items)
-✅ Click-to-view in Cargo.toml
-✅ Inline action buttons
-✅ Full workspace support with context-aware displays
-✅ Watch mode integration
-✅ Snapshot system
-✅ Full library target support
-✅ Keyboard shortcuts for both binary and library crates
-✅ Version change resilience with selective reversion
-✅ Workspace-inherited dependency visualization
-
-This extension is production-ready and actively maintained for comprehensive Rust development workflows.
-
----
 
 ## 📝 Version
 
