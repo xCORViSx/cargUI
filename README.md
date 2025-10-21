@@ -662,68 +662,10 @@ This extension is now production-ready and feature-complete for comprehensive Ru
 
 ---
 
-## 📝 Release Notes
+## 📝 Version
 
-### v1.0.5 - Enhanced Workspace & Dependency Management (October 2025)
-
-**✨ Major Updates:**
-
-**🔄 Workspace Interaction:**
-- ✅ Clickable member deselection (toggle back to "all" view)
-- ✅ Context-aware module display (shows only selected member's modules)
-- ✅ Workspace member path display for non-root members
-
-**📦 Dependency Visualization:**
-- ✅ Yellow star (⭐) icons for workspace-inherited dependencies
-- ✅ Correct version numbers for inherited dependencies in member categories
-- ✅ Inherited dependencies sorted to top of category lists
-- ✅ Tooltip shows "(from workspace)" for inherited dependencies
-
-**🛡️ Version Change Resilience:**
-- ✅ Selective reversion on failures (only failed updates revert)
-- ✅ Automatic duplicate/ambiguous dependency resolution
-- ✅ Lock file refresh for clean dependency resolution
-- ✅ Clear feedback showing which dependencies succeeded vs failed
-
-**🐛 Bug Fixes:**
-- ✅ Fixed workspace member target file opening
-- ✅ Fixed workspace dependency clicking to open root Cargo.toml
-- ✅ Fixed module detection false positives
-- ✅ Fixed multi-dependency version updates
-
----
-
-### v1.0.0 - Stable Release (October 2025)
-
-**🎉 Feature Complete - Production Ready!**
-
-**🎨 Project Organization:**
-- ✅ Smart Detection for unregistered targets and undeclared features
-- ✅ Module visualization with color-coded health indicators
-- ✅ Dependency version tracking with crates.io integration
-- ✅ File organization with auto-move to conventional directories
-- ✅ Intelligent module filtering (no false positives)
-
-**⚙️ Cargo & Rust:**
-- ✅ Full workspace support with context switching
-- ✅ Rustup integration (toolchain display)
-- ✅ Rust edition selector for easy edition management
-- ✅ Target color coding for health status
-- ✅ Drag & drop target reclassification
-- ✅ Auto-created default snapshots
-
-**🔧 Improvements:**
-- ✅ Workspace-aware detection across members
-- ✅ One-click Cargo.toml updates
-- ✅ Enhanced tooltips with rich information
-- ✅ Better icon system (context-aware)
-
-### v0.1.0 - Initial Release
-- Target discovery and management
-- Feature flag toggles
-- Snapshots system
-- Watch mode integration
-- Custom commands
+**Current:** v1.0.5  
+**See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and technical changes**
 
 ---
 
