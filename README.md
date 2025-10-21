@@ -11,13 +11,13 @@
 
 ## 🎯 What is cargUI?
 
-cargUI started as a simple GUI for Cargo commands, but has evolved into a **complete Rust development companion** covering:
+cargUI is a **visual Rust development companion** covering:
 
-- **🎨 Project Organization** - Smart detection, module visualization, target management
-- **⚙️ Cargo Integration** - Visual interface for all Cargo commands and features  
-- **🦀 Rust Toolchain** - Rustup integration and toolchain management
-- **📦 Workspace Support** - Intelligent multi-crate workspace handling
-- **🔍 Code Intelligence** - Module health indicators, dependency tracking
+- **🎨 Project organization** - Smart detection, visualization, and management of various Rust project elements
+- **⚙️ Cargo integration** - Visual interface for all Cargo commands and features  
+- **🦀 Rust toolchain** - Rustup integration and toolchain management
+- **📦 Workspace support** - Intelligent multi-crate workspace handling
+- **🔍 Health indications** - for the stability and quality of modules and dependencies
 - **📸 Configuration** - Snapshots for different development scenarios
 
 ### Why cargUI?
@@ -35,7 +35,7 @@ cargUI started as a simple GUI for Cargo commands, but has evolved into a **comp
 
 ## 🚀 Quick Start
 
-1. **Install** the extension from VS Code Marketplace
+1. **Install** the extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=xCORViSx.cargui)
 2. **Open** any Rust project with `Cargo.toml`
 3. **Find** the Cargo tree view in your Explorer sidebar
 4. **Check** a target → Click **Build/Run/Test**
@@ -102,7 +102,7 @@ Follows Rust best practices automatically!
 - Hierarchical structure
 - **Module counts** - Shows direct children count at all nesting levels
 
-**Context-aware display (v1.0.5):**
+**Context-aware display:**
 - When a workspace member is selected, shows only that member's modules
 - Automatically switches context when you select different workspace members
 - Clear separation of concerns in multi-crate projects
@@ -114,11 +114,10 @@ Follows Rust best practices automatically!
 <details>
 <summary><b>Dependency Management</b> - Track versions and update status</summary>
 
-**Visual indicators:**
+**Color-coded dependencies:**
 - 🟢 **Green text** = Latest version (up to date!)
 - ⭐ **Yellow star icon** = Workspace-inherited dependency (v1.0.5)
 - � **Package icon** = Standard dependency with version number shown
-- **Git/path dependencies** show "git" or path as description
 
 **Organized by type:**
 - **Production** - Runtime dependencies
