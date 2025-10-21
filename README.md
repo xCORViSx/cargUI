@@ -100,6 +100,12 @@ Follows Rust best practices automatically!
 - Test presence (`#[test]`, `#[cfg(test)]`)
 - Directory vs single-file modules
 - Hierarchical structure
+- **Module counts** - Shows direct children count at all nesting levels
+
+**Context-aware display (v1.0.5):**
+- When a workspace member is selected, shows only that member's modules
+- Automatically switches context when you select different workspace members
+- Clear separation of concerns in multi-crate projects
 
 **Click any module to open the file instantly!**
 
@@ -113,12 +119,26 @@ Follows Rust best practices automatically!
 - 🟡 Yellow = Update available
 - 🔵 Blue = Workspace dependency  
 - 🟠 Orange = Git/path dependency
+- ⭐ **Yellow star** = Workspace-inherited dependency (v1.0.5)
 
 **Organized by type:**
 - **Production** - Runtime dependencies
 - **Dev** - Development/testing dependencies
 - **Build** - Build script dependencies
 - **Workspace** - Shared workspace dependencies
+
+**Workspace-inherited dependencies (v1.0.5):**
+- Dependencies with `{ workspace = true }` display with yellow star icons
+- Show correct version numbers resolved from workspace
+- Sorted to the top of their category for easy identification
+- Tooltip shows "(from workspace)" origin
+- Click to navigate to workspace root `Cargo.toml`
+
+**Version change resilience (v1.0.5):**
+- **Selective reversion** - Only failed updates revert, successful ones persist
+- **Duplicate resolution** - Automatically removes ambiguous dependency constraints
+- **Lock file refresh** - Cleans `Cargo.lock` before updates for reliable resolution
+- **Clear feedback** - Shows which dependencies succeeded vs failed
 
 **Real-time crates.io integration** - Shows latest available versions automatically
 
@@ -312,6 +332,7 @@ members = ["cli", "api", "core", "utils"]
 - Click package name → Sets as active context
 - Tree updates to show that package's targets/features
 - Use when focusing on one crate
+- **Click again to deselect** and return to "all" view (v1.0.5)
 
 **Checkbox Click** (Build Selection):
 - Check packages → Include in build
@@ -321,6 +342,11 @@ members = ["cli", "api", "core", "utils"]
 **Special "All Members":**
 - Click → `cargo build --workspace` (builds everything)
 - Check → Same as checking all individually
+
+**Visual indicators:**
+- ⭐ Selected member shows star icon
+- Non-root members show relative directory path as description (v1.0.5)
+- Right-click member → "View Member's Cargo.toml" (v1.0.1)
 
 **Commands:**
 ```bash
@@ -641,24 +667,28 @@ cargUI/
 
 ## 🚀 Project Status
 
-**Version 1.0.0 - Feature Complete!**
+**Current Version: 1.0.5 - Production Ready**
 
-All planned features have been implemented:
+Core features:
 
 ✅ Smart detection for unregistered targets
-✅ Module visualization with health indicators
-✅ Dependency version tracking
+✅ Module visualization with health indicators & counts
+✅ Dependency version tracking with workspace inheritance support
 ✅ Rustup integration
 ✅ Rust edition selector
 ✅ Hierarchical organization (categories/subcategories)
 ✅ Mixed organization (categorized + uncategorized items)
 ✅ Click-to-view in Cargo.toml
 ✅ Inline action buttons
-✅ Full workspace support
+✅ Full workspace support with context-aware displays
 ✅ Watch mode integration
 ✅ Snapshot system
+✅ Full library target support
+✅ Keyboard shortcuts for both binary and library crates
+✅ Version change resilience with selective reversion
+✅ Workspace-inherited dependency visualization
 
-This extension is now production-ready and feature-complete for comprehensive Rust development workflows.
+This extension is production-ready and actively maintained for comprehensive Rust development workflows.
 
 ---
 
