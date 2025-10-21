@@ -664,6 +664,35 @@ This extension is now production-ready and feature-complete for comprehensive Ru
 
 ## 📝 Release Notes
 
+### v1.0.5 - Enhanced Workspace & Dependency Management (October 2025)
+
+**✨ Major Updates:**
+
+**🔄 Workspace Interaction:**
+- ✅ Clickable member deselection (toggle back to "all" view)
+- ✅ Context-aware module display (shows only selected member's modules)
+- ✅ Workspace member path display for non-root members
+
+**📦 Dependency Visualization:**
+- ✅ Yellow star (⭐) icons for workspace-inherited dependencies
+- ✅ Correct version numbers for inherited dependencies in member categories
+- ✅ Inherited dependencies sorted to top of category lists
+- ✅ Tooltip shows "(from workspace)" for inherited dependencies
+
+**🛡️ Version Change Resilience:**
+- ✅ Selective reversion on failures (only failed updates revert)
+- ✅ Automatic duplicate/ambiguous dependency resolution
+- ✅ Lock file refresh for clean dependency resolution
+- ✅ Clear feedback showing which dependencies succeeded vs failed
+
+**🐛 Bug Fixes:**
+- ✅ Fixed workspace member target file opening
+- ✅ Fixed workspace dependency clicking to open root Cargo.toml
+- ✅ Fixed module detection false positives
+- ✅ Fixed multi-dependency version updates
+
+---
+
 ### v1.0.0 - Stable Release (October 2025)
 
 **🎉 Feature Complete - Production Ready!**
