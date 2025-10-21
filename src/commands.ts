@@ -1002,6 +1002,82 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 	});
 
+	register('cargui.viewMainTargetFromModules', async (modulesItem: CargoTreeItem) => {
+		if (!modulesItem || !modulesItem.workspaceMember || !workspaceFolder) {
+			return;
+		}
+
+		// Get the selected member
+		const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+		const member = members.find(m => m.name === modulesItem.workspaceMember);
+		
+		if (!member) {
+			vscode.window.showErrorMessage(`Workspace member "${modulesItem.workspaceMember}" not found`);
+			return;
+		}
+
+		// Try to open main.rs first, then lib.rs
+		let filePath: string;
+		const basePath = path.join(workspaceFolder.uri.fsPath, member.path);
+		
+		const mainRsPath = path.join(basePath, 'src/main.rs');
+		const libRsPath = path.join(basePath, 'src/lib.rs');
+		
+		if (fs.existsSync(mainRsPath)) {
+			filePath = mainRsPath;
+		} else if (fs.existsSync(libRsPath)) {
+			filePath = libRsPath;
+		} else {
+			vscode.window.showErrorMessage(`No main.rs or lib.rs found in ${member.name}`);
+			return;
+		}
+
+		try {
+			const doc = await vscode.workspace.openTextDocument(filePath);
+			await vscode.window.showTextDocument(doc);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to open ${filePath}: ${error}`);
+		}
+	});
+
+	register('cargui.viewMainTargetFromMember', async (memberItem: CargoTreeItem) => {
+		if (!memberItem || !memberItem.workspaceMember || !workspaceFolder) {
+			return;
+		}
+
+		// Get the member info
+		const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+		const member = members.find(m => m.name === memberItem.workspaceMember);
+		
+		if (!member) {
+			vscode.window.showErrorMessage(`Workspace member "${memberItem.workspaceMember}" not found`);
+			return;
+		}
+
+		// Try to open main.rs first, then lib.rs
+		let filePath: string;
+		const basePath = path.join(workspaceFolder.uri.fsPath, member.path);
+		
+		const mainRsPath = path.join(basePath, 'src/main.rs');
+		const libRsPath = path.join(basePath, 'src/lib.rs');
+		
+		if (fs.existsSync(mainRsPath)) {
+			filePath = mainRsPath;
+		} else if (fs.existsSync(libRsPath)) {
+			filePath = libRsPath;
+		} else {
+			vscode.window.showErrorMessage(`No main.rs or lib.rs found in ${member.name}`);
+			return;
+		}
+
+		try {
+			const doc = await vscode.workspace.openTextDocument(filePath);
+			await vscode.window.showTextDocument(doc);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to open ${filePath}: ${error}`);
+		}
+	});
+
 	register('cargui.viewMemberCargoToml', async (item: CargoTreeItem) => {
 		if (!item || !item.workspaceMember || !workspaceFolder) {
 			return;

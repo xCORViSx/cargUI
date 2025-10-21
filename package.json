@@ -379,6 +379,18 @@
         "icon": "$(file-code)"
       },
       {
+        "command": "cargui.viewMainTargetFromModules",
+        "title": "View Main Target",
+        "category": "cargUI",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "cargui.viewMainTargetFromMember",
+        "title": "View Main Target",
+        "category": "cargUI",
+        "icon": "$(file-code)"
+      },
+      {
         "command": "cargui.toggleAllFeatures",
         "title": "Toggle All Features",
         "category": "cargUI",
@@ -821,6 +833,16 @@
           "group": "navigation@2"
         },
         {
+          "command": "cargui.viewMainTargetFromModules",
+          "when": "view == cargoTargets && viewItem == modulesCategorySingle",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cargui.viewMainTargetFromMember",
+          "when": "view == cargoTargets && viewItem == workspaceMemberFolder",
+          "group": "navigation@1"
+        },
+        {
           "command": "cargui.moveTargetToStandardLocation",
           "when": "view == cargoTargets && viewItem == target",
           "group": "1_file@1"
@@ -1188,7 +1210,7 @@
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.x",
     "@typescript-eslint/parser": "^6.x",
-    "@vscode/vsce": "^2.22.0",
+    "@vscode/vsce": "^2.32.0",
     "eslint": "^8.x",
     "typescript": "^5.3.0"
   },

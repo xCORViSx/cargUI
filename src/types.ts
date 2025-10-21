@@ -7,6 +7,8 @@ export const enum TreeItemContext {
     // Categories
     WorkspaceCategory = 'workspaceCategory',
     ModulesCategory = 'modulesCategory',
+    ModulesCategorySingle = 'modulesCategorySingle',
+    ModulesCategoryMulti = 'modulesCategoryMulti',
     DependenciesCategory = 'dependenciesCategory',
     SnapshotsCategory = 'snapshotsCategory',
     TargetsCategory = 'targetsCategory',
@@ -24,6 +26,7 @@ export const enum TreeItemContext {
     UnknownsFolder = 'unknownsFolder',
     ArgumentSubcategory = 'argumentSubcategory',
     CustomCommandSubcategory = 'customCommandSubcategory',
+    WorkspaceMemberFolder = 'workspaceMemberFolder',
     
     // Items
     WorkspaceMember = 'workspaceMember',

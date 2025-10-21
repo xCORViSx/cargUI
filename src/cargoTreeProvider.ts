@@ -649,7 +649,23 @@ export class CargoTreeDataProvider implements
                 const modules = detectModules(srcPath);
                 totalModules = modules.length;
             }
-            const modulesItem = new CargoTreeItem('MODULES', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.ModulesCategory, { iconName: 'package' });
+            
+            // Use appropriate context based on member count and selection
+            let modulesContext = TreeItemContext.ModulesCategory;
+            let selectedMember: string | undefined;
+            if (this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all') {
+                // Single member selected
+                modulesContext = TreeItemContext.ModulesCategorySingle;
+                selectedMember = this.selectedWorkspaceMember;
+            } else if (members.length > 1) {
+                // Multi-member workspace with no specific selection
+                modulesContext = TreeItemContext.ModulesCategoryMulti;
+            }
+            
+            const modulesItem = new CargoTreeItem('MODULES', vscode.TreeItemCollapsibleState.Collapsed, modulesContext, { 
+                iconName: 'package',
+                workspaceMember: selectedMember
+            });
             modulesItem.description = `${totalModules}`;
             items.push(modulesItem);
 
@@ -769,10 +785,15 @@ export class CargoTreeDataProvider implements
                     iconName = 'home';
                 }
                 
+                // Use folder context for multi-member workspaces, item context for single
+                const contextValue = workspaceMembers.length > 1 
+                    ? TreeItemContext.WorkspaceMemberFolder 
+                    : TreeItemContext.WorkspaceMember;
+                
                 const memberItem = new CargoTreeItem(
                     member.name,
-                    vscode.TreeItemCollapsibleState.None,
-                    TreeItemContext.WorkspaceMember,
+                    workspaceMembers.length > 1 ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.None,
+                    contextValue,
                     {
                         iconName: iconName,
                         workspaceMember: member.name
