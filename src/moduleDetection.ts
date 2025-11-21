@@ -98,15 +98,19 @@ export function findModuleFile(basePath: string, moduleName: string, isDeclared:
 }
 
 /**
- * Analyzes a module file to extract metadata like documentation and tests.
+ * Analyzes a module file to extract code elements and documentation metrics.
+ * This counts distinct code items (structs, functions, enums, traits, etc.)
+ * and determines how many of them have doc comments to calculate module health.
  * 
  * @param filePath - Path to the module file
  * @param content - File content (optional, will read if not provided)
- * @returns Object with module metadata
+ * @returns Object with module metadata including documentation percentage
  */
 function analyzeModuleFile(filePath: string, content?: string): {
     hasDocComment: boolean;
     hasTests: boolean;
+    totalElements: number;
+    documentedElements: number;
 } {
     const fileContent = content || (fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '');
     
@@ -116,7 +120,84 @@ function analyzeModuleFile(filePath: string, content?: string): {
     // Check for tests
     const hasTests = /#\[test\]|#\[cfg\(test\)\]/.test(fileContent);
     
-    return { hasDocComment, hasTests };
+    // Parse code elements and count documentation
+    const { totalElements, documentedElements } = parseCodeElements(fileContent);
+    
+    return { hasDocComment, hasTests, totalElements, documentedElements };
+}
+
+/**
+ * Parses Rust code to identify and count code elements (structs, functions, enums, traits, impls).
+ * For each element, checks if it has a preceding doc comment (/// or //!).
+ * We count actual distinct items, not lines of documentation.
+ * 
+ * Note: impl blocks are not counted as elements since they don't need separate documentation—
+ * the documentation belongs on the type or methods inside the impl block.
+ * 
+ * @param content - Rust source code content
+ * @returns Object with total element count and count of documented elements
+ */
+function parseCodeElements(content: string): { totalElements: number; documentedElements: number } {
+    // Remove comments to avoid counting doc comment markers as code
+    let sanitized = content;
+    
+    // Remove block comments /* */
+    sanitized = sanitized.replace(/\/\*[\s\S]*?\*\//g, '');
+    
+    // Split into lines for line-by-line analysis
+    const lines = sanitized.split('\n');
+    
+    let totalElements = 0;
+    let documentedElements = 0;
+    
+    // Patterns for code elements: pub/private struct, enum, trait, function, etc.
+    // We look for these keywords at statement level (not in comments or strings)
+    // Note: impl blocks are intentionally excluded since they don't need separate doc comments
+    const elementPatterns = [
+        /^\s*(pub(\s+\([^)]*\))?\s+)?(async\s+)?fn\s+\w+/,        // Functions (pub fn, async fn, etc.)
+        /^\s*(pub(\s+\([^)]*\))?\s+)?(struct|enum|union|trait)\s+\w+/, // Type definitions
+        /^\s*(pub(\s+\([^)]*\))?\s+)?type\s+\w+/,                 // Type aliases
+        /^\s*(pub(\s+\([^)]*\))?\s+)?const\s+\w+/,                // Constants
+        /^\s*(pub(\s+\([^)]*\))?\s+)?static\s+\w+/,               // Statics
+    ];
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        // Check if any element pattern matches this line
+        let isElement = false;
+        for (const pattern of elementPatterns) {
+            if (pattern.test(line)) {
+                isElement = true;
+                break;
+            }
+        }
+        
+        if (isElement) {
+            totalElements++;
+            
+            // Check if this element has a doc comment on the preceding line(s)
+            // Look back up to 3 lines for doc comments (/// or //!)
+            let hasDoc = false;
+            for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+                const prevLine = lines[j].trim();
+                if (prevLine.startsWith('///') || prevLine.startsWith('//!')) {
+                    hasDoc = true;
+                    break;
+                }
+                // Stop if we hit a non-comment, non-attribute line
+                if (prevLine && !prevLine.startsWith('//') && !prevLine.startsWith('#[')) {
+                    break;
+                }
+            }
+            
+            if (hasDoc) {
+                documentedElements++;
+            }
+        }
+    }
+    
+    return { totalElements, documentedElements };
 }
 
 /**
@@ -220,6 +301,45 @@ export function findUndeclaredModules(basePath: string, declaredModules: Set<str
 }
 
 /**
+ * Calculates the health status of a module based on documentation percentage.
+ * Health is determined by counting code elements (structs, functions, enums, etc.)
+ * and checking what percentage have doc comments.
+ * 
+ * The health scale is:
+ * - 0-50%: No color (underdocumented)
+ * - 50-90%: Blue (moderately documented)
+ * - 90-100%: Green (well documented)
+ * 
+ * For modules with no code elements, no color is assigned.
+ * 
+ * @param moduleInfo - Module to analyze
+ * @returns Object with health percentage and appropriate color, or undefined if no elements or underdoc
+ */
+function calculateModuleHealth(moduleInfo: ModuleInfo): { percentage: number; color: string } | undefined {
+    // Skip if module has no code elements to evaluate
+    if (!moduleInfo.totalElements || moduleInfo.totalElements === 0) {
+        return undefined;
+    }
+    
+    const documentedCount = moduleInfo.documentedElements || 0;
+    const percentage = (documentedCount / moduleInfo.totalElements) * 100;
+    
+    let color: string | undefined;
+    if (percentage < 50) {
+        // No color: 0-50% (underdocumented)
+        color = undefined;
+    } else if (percentage < 90) {
+        // Blue: 50-90% (moderately documented)
+        color = 'charts.blue';
+    } else {
+        // Green: 90-100% (well documented)
+        color = 'charts.green';
+    }
+    
+    return color !== undefined ? { percentage, color } : undefined;
+}
+
+/**
  * Builds a tree of CargoTreeItem objects from ModuleInfo array for display in VS Code tree view.
  * 
  * @param modules - Array of ModuleInfo objects to convert
@@ -260,10 +380,17 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
             tooltipParts.push('🌐 Public module (pub mod)');
         }
         if (mod.hasDocComment) {
-            tooltipParts.push('📝 Has documentation');
+            tooltipParts.push('📝 Has module documentation');
         }
         if (mod.hasTests) {
             tooltipParts.push('✅ Contains tests');
+        }
+        
+        // Add health information
+        if (mod.totalElements && mod.totalElements > 0) {
+            const documentedCount = mod.documentedElements || 0;
+            const healthPercent = ((documentedCount / mod.totalElements) * 100).toFixed(0);
+            tooltipParts.push(`📊 Documentation: ${documentedCount}/${mod.totalElements} elements (${healthPercent}%)`);
         }
         
         item.tooltip = tooltipParts.join('\n');
@@ -284,26 +411,30 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
         if (mod.isPublic) {
             descParts.push('pub');
         }
+        
+        // Add health indicator if we have element data
+        if (mod.totalElements && mod.totalElements > 0) {
+            const documentedCount = mod.documentedElements || 0;
+            const healthPercent = Math.round((documentedCount / mod.totalElements) * 100);
+            descParts.push(`${healthPercent}%`);
+        }
+        
         item.description = descParts.join(' ');
         
-        // Determine color based on module health/status
+        // Determine color based on new health system
         let color: string | undefined;
         const moduleKey = `module-${mod.name}-${mod.path}`;
         
         if (!mod.isDeclared) {
-            // Orange: Undeclared modules (warning)
-            color = 'charts.orange';
-        } else if (mod.isPublic && mod.hasDocComment) {
-            // Green: Well-maintained public API modules
-            color = 'charts.green';
-        } else if (mod.isPublic) {
-            // Blue: Public modules (part of API)
-            color = 'charts.blue';
-        } else if (!mod.hasDocComment && mod.isDeclared) {
-            // Yellow: Private modules missing documentation
-            color = 'charts.yellow';
+            // Red: Undeclared modules (not declared with mod statement)
+            color = 'charts.red';
+        } else {
+            // Use new health-based color system for declared modules
+            const health = calculateModuleHealth(mod);
+            if (health) {
+                color = health.color;
+            }
         }
-        // No color = private internal module with docs (default styling)
         
         // Apply coloring
         if (color) {

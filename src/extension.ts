@@ -107,10 +107,28 @@ export async function activate(context: vscode.ExtensionContext) {
         // Initialize default configuration
         await initializeDefaultConfig(workspaceFolder, cargoTreeProvider);
 
+        // Check if this is the first activation with the new separate notification keys
+        // by looking for a migration marker
+        const migrationMarker = 'cargui.notificationKeysMigrated';
+        const alreadyMigrated = context.workspaceState.get(migrationMarker, false);
+        
+        if (!alreadyMigrated) {
+            // First time with new keys - clear ALL old notification state to ensure clean slate
+            await context.workspaceState.update('cargui.ignoreUnknownTargets', undefined);
+            await context.workspaceState.update('cargui.ignoreUndeclaredModules', undefined);
+            await context.workspaceState.update('cargui.ignoreUndeclaredFeatures', undefined);
+            // Mark as migrated so we don't do this again
+            await context.workspaceState.update(migrationMarker, true);
+        }
+
         cargoTreeProvider.setWorkspaceContext(workspaceFolder, context);
 
+        // Trigger initial refresh to populate tree and run smart detection
+        cargoTreeProvider.refresh();
+
+        // Watch all Cargo.toml files (root and workspace members)
         const cargoTomlWatcher = vscode.workspace.createFileSystemWatcher(
-            new vscode.RelativePattern(workspaceFolder, 'Cargo.toml')
+            new vscode.RelativePattern(workspaceFolder, '**/Cargo.toml')
         );
         cargoTomlWatcher.onDidChange(() => cargoTreeProvider.refresh());
         cargoTomlWatcher.onDidCreate(() => cargoTreeProvider.refresh());
@@ -124,10 +142,31 @@ export async function activate(context: vscode.ExtensionContext) {
         targetsWatcher.onDidCreate(() => cargoTreeProvider.refresh());
         targetsWatcher.onDidDelete(() => cargoTreeProvider.refresh());
         context.subscriptions.push(targetsWatcher);
+
+        // Watch all Rust source files in src/ for module documentation changes
+        const srcFilesWatcher = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern(workspaceFolder, '**/src/**/*.rs')
+        );
+        srcFilesWatcher.onDidChange(() => cargoTreeProvider.refresh());
+        srcFilesWatcher.onDidCreate(() => cargoTreeProvider.refresh());
+        srcFilesWatcher.onDidDelete(() => cargoTreeProvider.refresh());
+        context.subscriptions.push(srcFilesWatcher);
     } else {
         console.log('No workspace folder found');
         vscode.window.showWarningMessage('No workspace folder - cargUI view will not be available');
     }
+
+    const textDocumentSaveDisposable = vscode.workspace.onDidSaveTextDocument((document) => {
+        // If a Rust file was saved, refresh the tree to update module documentation stats
+        if (document.fileName.endsWith('.rs')) {
+            cargoTreeProvider.refresh();
+        }
+        // If a Cargo.toml was saved, refresh immediately to update targets/features
+        if (document.fileName.endsWith('Cargo.toml')) {
+            cargoTreeProvider.refresh();
+        }
+    });
+    context.subscriptions.push(textDocumentSaveDisposable);
 
     const terminalCloseDisposable = vscode.window.onDidCloseTerminal(terminal => {
         if (terminal === watchTerminal) {

@@ -38,6 +38,12 @@ export async function moveTargetToStandardLocation(
     let standardDir: string;
     const filename = path.basename(target.path);
     
+    // we skip main.rs and lib.rs as they're already in their standard location (src/)
+    if (filename === 'main.rs' || filename === 'lib.rs') {
+        vscode.window.showInformationMessage(`${filename} is already in standard location (src/)`);
+        return false;
+    }
+    
     if (target.type === 'bin') {
         standardDir = path.join(basePath, 'src', 'bin');
     } else if (target.type === 'example') {

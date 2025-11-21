@@ -26,6 +26,8 @@ import { detectModules, buildModuleTree } from './moduleDetection';
 import { fetchCrateVersions } from './cratesIo';
 import { CargoTreeState } from './cargoCommands';
 import { getCurrentEdition } from './rustEdition';
+import { detectUndeclaredFeatures } from './smartDetection';
+import { showConfigureUnregisteredUI } from './smartDetectionUI';
 
 /**
  * Main tree data provider for the Cargo sidebar view.
@@ -77,7 +79,9 @@ export class CargoTreeDataProvider implements
 
     // Allow external setting of mode states
     setSelectedWorkspaceMember(member: string | undefined): void {
+        console.log('[cargUI] setSelectedWorkspaceMember called with:', member);
         this.selectedWorkspaceMember = member;
+        console.log('[cargUI] selectedWorkspaceMember is now:', this.selectedWorkspaceMember);
     }
 
     getSelectedWorkspaceMember(): string | undefined {
@@ -112,33 +116,112 @@ export class CargoTreeDataProvider implements
         }
         
         this.detectionTimeout = setTimeout(async () => {
-            if (!this.workspaceFolder || !this.context) return;
+            if (!this.workspaceFolder || !this.context) {
+                return;
+            }
             
-            // Check if user has disabled detection
-            const ignoredKey = 'cargui.ignoreUnknownTargets';
-            const ignored = this.context.workspaceState.get(ignoredKey, false);
-            if (ignored) return;
-            
-            // Only detect unknown targets now (features are handled separately)
+            // we detect both unknown targets and undeclared features
             const workspaceMembers = discoverWorkspaceMembers(this.workspaceFolder.uri.fsPath);
             const targetMemberPath = this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all'
                 ? workspaceMembers.find(m => m.name === this.selectedWorkspaceMember)?.path
                 : undefined;
             const unknownTargets = this.detectUnregisteredTargetsFunc(this.workspaceFolder.uri.fsPath, targetMemberPath);
+            const undeclaredFeatures = detectUndeclaredFeatures(this.workspaceFolder.uri.fsPath, targetMemberPath);
             
-            if (unknownTargets.length > 0) {
-                // Simple notification
-                const targetText = unknownTargets.length === 1 ? 'unknown target type' : 'unknown target types';
-                const message = `Found ${unknownTargets.length} ${targetText}. Check the Unknowns folder in the Targets tree.`;
+            // Detect undeclared modules
+            let undeclaredModules: ModuleInfo[] = [];
+            const members = discoverWorkspaceMembers(this.workspaceFolder.uri.fsPath);
+            if (members.length > 1) {
+                for (const member of members) {
+                    const srcPath = path.join(this.workspaceFolder.uri.fsPath, member.path, 'src');
+                    const modules = detectModules(srcPath);
+                    const undeclared = modules.filter(m => !m.isDeclared);
+                    undeclaredModules.push(...undeclared);
+                }
+            } else {
+                const srcPath = path.join(this.workspaceFolder.uri.fsPath, 'src');
+                const modules = detectModules(srcPath);
+                undeclaredModules = modules.filter(m => !m.isDeclared);
+            }
+            
+            // Show notifications based on what exists (each with its own ignore key)
+            const hasTargets = unknownTargets.length > 0;
+            const hasFeatures = undeclaredFeatures.length > 0;
+            const hasModules = undeclaredModules.length > 0;
+            
+            if (hasTargets || hasFeatures || hasModules) {
+                const context = this.context;
+                let delay = 0;
                 
-                const choice = await vscode.window.showInformationMessage(
-                    message,
-                    'Got it',
-                    "Don't Show Again"
-                );
+                // Show targets notification
+                if (hasTargets) {
+                    const targetsIgnoredKey = 'cargui.ignoreUnknownTargets';
+                    const targetsIgnored = context.workspaceState.get(targetsIgnoredKey, false);
+                    
+                    if (!targetsIgnored) {
+                        const targetText = unknownTargets.length === 1 ? 'unknown target type' : 'unknown target types';
+                        const targetMessage = `Found ${unknownTargets.length} ${targetText}. Check the Unknowns folder in the Targets tree.`;
+                        
+                        vscode.window.showInformationMessage(
+                            targetMessage,
+                            'Got it',
+                            "Don't Show Again"
+                        ).then(choice => {
+                            if (choice === "Don't Show Again" && context) {
+                                context.workspaceState.update(targetsIgnoredKey, true);
+                            }
+                        });
+                        delay += 100;
+                    }
+                }
                 
-                if (choice === "Don't Show Again") {
-                    await this.context.workspaceState.update(ignoredKey, true);
+                // Show features notification
+                if (hasFeatures) {
+                    const featuresIgnoredKey = 'cargui.ignoreUndeclaredFeatures';
+                    const featuresIgnored = context.workspaceState.get(featuresIgnoredKey, false);
+                    
+                    if (!featuresIgnored) {
+                        setTimeout(() => {
+                            const featureText = undeclaredFeatures.length === 1 ? 'undeclared feature' : 'undeclared features';
+                            const featureMessage = `Found ${undeclaredFeatures.length} ${featureText}. Check the Features section in the tree.`;
+                            
+                            vscode.window.showInformationMessage(
+                                featureMessage,
+                                'Got it',
+                                "Don't Show Again"
+                            ).then(choice => {
+                                if (choice === "Don't Show Again" && context) {
+                                    context.workspaceState.update(featuresIgnoredKey, true);
+                                }
+                            });
+                        }, delay);
+                        delay += 100;
+                    }
+                }
+                
+                // Show modules notification
+                if (hasModules) {
+                    const modulesIgnoredKey = 'cargui.ignoreUndeclaredModules';
+                    const modulesIgnored = context.workspaceState.get(modulesIgnoredKey, false);
+                    
+                    if (!modulesIgnored) {
+                        setTimeout(() => {
+                            const moduleText = undeclaredModules.length === 1 ? 'undeclared module' : 'undeclared modules';
+                            const moduleMessage = `Found ${undeclaredModules.length} ${moduleText}. Check the MODULES section in the tree.`;
+                            
+                            vscode.window.showInformationMessage(
+                                moduleMessage,
+                                'Got it',
+                                "Don't Show Again"
+                            ).then(choice => {
+                                if (choice === "Don't Show Again" && context) {
+                                    context.workspaceState.update(modulesIgnoredKey, true);
+                                }
+                            });
+                        }, delay);
+                    } else {
+                        console.log('[cargUI] Modules notification suppressed (ignore flag set)');
+                    }
                 }
             }
         }, 2000); // 2 second debounce
@@ -186,6 +269,10 @@ export class CargoTreeDataProvider implements
 
     getCheckedFeatures(): string[] {
         return Array.from(this.checkedFeatures);
+    }
+
+    isFeatureChecked(featureName: string): boolean {
+        return this.checkedFeatures.has(featureName);
     }
 
     toggleArgument(argument: string): void {
@@ -269,6 +356,14 @@ export class CargoTreeDataProvider implements
     // Helper to remove checked env var
     removeCheckedEnvVar(envVar: string): void {
         this.checkedEnvVars.delete(envVar);
+    }
+
+    // we provide public access to unknown targets for batch operations
+    getUnknownTargets(memberPath?: string): UnregisteredItem[] {
+        if (!this.workspaceFolder) {
+            return [];
+        }
+        return this.detectUnregisteredTargetsFunc(this.workspaceFolder.uri.fsPath, memberPath);
     }
 
     toggleWorkspaceMember(memberName: string): void {
@@ -569,6 +664,49 @@ export class CargoTreeDataProvider implements
         this.refresh();
     }
 
+    private getProjectNameAndVersion(workspacePath: string): { name: string; version: string } | null {
+        // We read the project name and version from the root Cargo.toml (ignoring workspace members).
+        const cargoTomlPath = path.join(workspacePath, 'Cargo.toml');
+        try {
+            const content = fs.readFileSync(cargoTomlPath, 'utf-8');
+            const parsed = toml.parse(content) as CargoManifest;
+            if (parsed.package?.name && parsed.package?.version) {
+                return {
+                    name: parsed.package.name,
+                    version: parsed.package.version
+                };
+            }
+        } catch (e) {
+            // Silently fail if can't read Cargo.toml
+        }
+        return null;
+    }
+
+    private getMemberNameAndVersion(workspacePath: string, memberName: string): { name: string; version: string } | null {
+        // We read the member's name and version from their Cargo.toml
+        const workspaceMembers = discoverWorkspaceMembers(workspacePath);
+        const member = workspaceMembers.find(m => m.name === memberName);
+        
+        if (!member) {
+            return null;
+        }
+
+        const cargoTomlPath = path.join(workspacePath, member.path, 'Cargo.toml');
+        try {
+            const content = fs.readFileSync(cargoTomlPath, 'utf-8');
+            const parsed = toml.parse(content) as CargoManifest;
+            if (parsed.package?.name && parsed.package?.version) {
+                return {
+                    name: parsed.package.name,
+                    version: parsed.package.version
+                };
+            }
+        } catch (e) {
+            // Silently fail if can't read Cargo.toml
+        }
+        return null;
+    }
+
     getChildren(element?: CargoTreeItem): Thenable<CargoTreeItem[]> {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
@@ -579,30 +717,82 @@ export class CargoTreeDataProvider implements
             // Root level - show command categories and targets
             const items: CargoTreeItem[] = [];
 
-            // Watch Mode indicator
-            const watchLabel = this.isWatchMode ? `Watch: ${this.watchAction} (Active)` : 'Watch: Inactive';
-            const watchItem = new CargoTreeItem(
-                watchLabel,
-                vscode.TreeItemCollapsibleState.None,
-                TreeItemContext.WatchMode,
-                { iconName: this.isWatchMode ? 'eye' : 'eye-closed' }
-            );
-            watchItem.description = this.isWatchMode ? '⚡' : '';
-            watchItem.tooltip = this.isWatchMode 
-                ? `Click to stop watching (${this.watchAction})`
-                : 'Click to start watch mode';
-            watchItem.command = {
-                command: 'cargui.toggleWatch',
-                title: 'Toggle Watch Mode'
-            };
-            items.push(watchItem);
-
-            // Workspace Members (only show if multi-crate workspace)
-            const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
-            const isWorkspace = workspaceMembers.length > 0;
+            // Project header with name and version
+            // We show either the root package info or workspace member info
+            let projectInfo = this.getProjectNameAndVersion(workspaceFolder.uri.fsPath);
+            console.log('[cargUI] Building header - selectedWorkspaceMember:', this.selectedWorkspaceMember);
+            console.log('[cargUI] projectInfo:', projectInfo);
             
-            // Set context for conditional UI elements
-            vscode.commands.executeCommand('setContext', 'cargui.isWorkspace', isWorkspace);
+            // For workspace-only projects (no root package), use workspace name from folder
+            let isWorkspaceOnly = false;
+            if (!projectInfo) {
+                const workspaceName = path.basename(workspaceFolder.uri.fsPath);
+                projectInfo = { name: workspaceName, version: '0.0.0' };
+                isWorkspaceOnly = true;
+            }
+            
+            // We show the selected workspace member name in the project header if one is selected in multi-crate projects
+            let headerLabel = isWorkspaceOnly ? projectInfo.name : `${projectInfo.name} (v${projectInfo.version})`;
+            let tooltipText = `Project: ${projectInfo.name}\nVersion: ${projectInfo.version}`;
+            let headerDescription = '';
+            
+            console.log('[cargUI] About to check selectedWorkspaceMember:', this.selectedWorkspaceMember, 'against "all"');
+            if (this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all') {
+                console.log('[cargUI] Getting member info for:', this.selectedWorkspaceMember);
+                const memberInfo = this.getMemberNameAndVersion(workspaceFolder.uri.fsPath, this.selectedWorkspaceMember);
+                console.log('[cargUI] Member info result:', memberInfo);
+                if (memberInfo && memberInfo.version && typeof memberInfo.version === 'string') {
+                    headerLabel = `${memberInfo.name} (v${memberInfo.version})`;
+                    tooltipText = `Member: ${memberInfo.name}\nProject: ${projectInfo.name}\nVersion: ${memberInfo.version}`;
+                    headerDescription = `📦 ${this.selectedWorkspaceMember}`;
+                    console.log('[cargUI] Updated header label to:', headerLabel);
+                } else if (memberInfo) {
+                    // If no version or version is invalid, just show the member name
+                    headerLabel = memberInfo.name;
+                    tooltipText = `Member: ${memberInfo.name}\nProject: ${projectInfo.name}`;
+                    headerDescription = `📦 ${this.selectedWorkspaceMember}`;
+                }
+            } else {
+                console.log('[cargUI] NOT entering member info block - selectedWorkspaceMember:', this.selectedWorkspaceMember);
+            }
+
+            const projectItem = new CargoTreeItem(
+                headerLabel,
+                vscode.TreeItemCollapsibleState.None,
+                TreeItemContext.ProjectHeader,
+                { iconName: 'package' }
+            );
+            projectItem.description = '';
+            projectItem.tooltip = tooltipText;
+            
+            // we set a VS Code context variable to track if a member is selected
+            const hasMemberSelected = this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all';
+            vscode.commands.executeCommand('setContext', 'cargui.hasMemberSelected', hasMemberSelected);
+            
+            // we make the project header orange
+            projectItem.iconPath = new vscode.ThemeIcon('package', new vscode.ThemeColor('charts.orange'));
+            
+            // we set the workspace member on the item so the command handler knows which member is selected
+            if (hasMemberSelected) {
+                projectItem.workspaceMember = this.selectedWorkspaceMember;
+                // we mark this with a resourceUri so context menus can detect member selection
+                projectItem.resourceUri = vscode.Uri.parse('cargui-workspace-member-header:selected');
+            }
+            // We add yellow color when showing workspace-only name (no root package) or when a member is selected
+            if (isWorkspaceOnly || hasMemberSelected) {
+                // (color is already set by resourceUri if member is selected, apply for workspace-only without member)
+                if (!hasMemberSelected) {
+                    projectItem.resourceUri = vscode.Uri.parse('cargui-workspace-member-header:workspace-only');
+                }
+            }
+            // we only set a click command if there's a root Cargo.toml to open
+            // pass just the member name if one is selected to avoid circular references
+            projectItem.command = {
+                title: 'Open Cargo.toml',
+                command: 'cargui.openProjectCargoToml',
+                arguments: [hasMemberSelected ? this.selectedWorkspaceMember : null]
+            };
+            items.push(projectItem);
 
             // Rust Edition indicator
             // Always use workspace root for edition (multi-crate workspaces use [workspace.package])
@@ -622,19 +812,49 @@ export class CargoTreeDataProvider implements
                 };
                 items.push(editionItem);
             }
+
+            // Workspace Members (only show if multi-crate workspace)
+            const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+            const isWorkspace = workspaceMembers.length > 0;
             
+            // Set context for conditional UI elements
+            vscode.commands.executeCommand('setContext', 'cargui.isWorkspace', isWorkspace);
+
             if (workspaceMembers.length > 1) {
                 const workspaceLabel = this.selectedWorkspaceMember === 'all' 
                     ? 'WORKSPACE MEMBERS (All)' 
                     : this.selectedWorkspaceMember 
                         ? `WORKSPACE MEMBERS (${this.selectedWorkspaceMember})`
                         : 'WORKSPACE MEMBERS';
-                items.push(new CargoTreeItem(workspaceLabel, vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.WorkspaceCategory, { iconName: 'repo' }));
+                const workspaceCategoryItem = new CargoTreeItem(workspaceLabel, vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.WorkspaceCategory, { iconName: 'repo' });
+                workspaceCategoryItem.resourceUri = vscode.Uri.parse('cargui-workspace-category:workspace');
+                // we make the workspace category icon orange
+                workspaceCategoryItem.iconPath = new vscode.ThemeIcon('repo', new vscode.ThemeColor('charts.orange'));
+                items.push(workspaceCategoryItem);
             }
 
+            // Watch Mode indicator
+            const watchLabel = this.isWatchMode ? `Watch: ${this.watchAction} (Active)` : 'Watch: Inactive';
+            const watchItem = new CargoTreeItem(
+                watchLabel,
+                vscode.TreeItemCollapsibleState.None,
+                TreeItemContext.WatchMode,
+                { iconName: this.isWatchMode ? 'eye' : 'eye-closed' }
+            );
+            watchItem.description = this.isWatchMode ? '⚡' : '';
+            watchItem.tooltip = this.isWatchMode 
+                ? `Click to stop watching (${this.watchAction})`
+                : 'Click to start watch mode';
+            watchItem.command = {
+                command: 'cargui.toggleWatch',
+                title: 'Toggle Watch Mode'
+            };
+            items.push(watchItem);
+
             // MODULES
-            // Count total modules
+            // Count total modules and undeclared modules
             let totalModules = 0;
+            let totalUndeclared = 0;
             const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
             if (members.length > 1) {
                 // Multi-member workspace - count modules per member
@@ -642,31 +862,29 @@ export class CargoTreeDataProvider implements
                     const srcPath = path.join(workspaceFolder.uri.fsPath, member.path, 'src');
                     const modules = detectModules(srcPath);
                     totalModules += modules.length;
+                    totalUndeclared += modules.filter(m => !m.isDeclared).length;
                 }
             } else {
                 // Single crate - count modules directly
                 const srcPath = path.join(workspaceFolder.uri.fsPath, 'src');
                 const modules = detectModules(srcPath);
                 totalModules = modules.length;
+                totalUndeclared = modules.filter(m => !m.isDeclared).length;
             }
             
-            // Use appropriate context based on member count and selection
-            let modulesContext = TreeItemContext.ModulesCategory;
-            let selectedMember: string | undefined;
-            if (this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all') {
-                // Single member selected
-                modulesContext = TreeItemContext.ModulesCategorySingle;
-                selectedMember = this.selectedWorkspaceMember;
-            } else if (members.length > 1) {
-                // Multi-member workspace with no specific selection
-                modulesContext = TreeItemContext.ModulesCategoryMulti;
-            }
-            
-            const modulesItem = new CargoTreeItem('MODULES', vscode.TreeItemCollapsibleState.Collapsed, modulesContext, { 
-                iconName: 'package',
-                workspaceMember: selectedMember
-            });
+            // we color icon red when undeclared modules exist
+            const modulesItem = totalUndeclared > 0
+                ? new CargoTreeItem('MODULES', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.ModulesCategory)
+                : new CargoTreeItem('MODULES', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.ModulesCategory, { iconName: 'package' });
+                
             modulesItem.description = `${totalModules}`;
+            
+            if (totalUndeclared > 0) {
+                modulesItem.resourceUri = vscode.Uri.parse(`cargui-modules-category:has-undeclared`);
+                modulesItem.iconPath = new vscode.ThemeIcon('package', new vscode.ThemeColor('charts.red'));
+                console.log('[cargUI] Modules category has', totalUndeclared, 'undeclared modules, resourceUri set');
+            }
+            
             items.push(modulesItem);
 
             // Dependencies
@@ -677,7 +895,8 @@ export class CargoTreeDataProvider implements
             const totalDeps = dependencies.workspace.length + dependencies.production.length + dependencies.dev.length + dependencies.build.length;
             // Always show dependencies section, even if empty
             const dependenciesItem = new CargoTreeItem('DEPENDENCIES', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.DependenciesCategory);
-            dependenciesItem.description = `${totalDeps}`;
+            const checkedDepCount = this.checkedDependencies.size;
+            dependenciesItem.description = `${totalDeps}${checkedDepCount > 0 ? ` ✓${checkedDepCount}` : ''}`;
             items.push(dependenciesItem);
 
             // Separator before config group
@@ -721,9 +940,35 @@ export class CargoTreeDataProvider implements
             const targets = this.selectedWorkspaceMember === 'all' 
                 ? [] 
                 : discoverCargoTargets(workspaceFolder.uri.fsPath, targetMemberPath);
-            if (targets.length > 0) {
-                const targetsItem = new CargoTreeItem('Targets', vscode.TreeItemCollapsibleState.Expanded, TreeItemContext.TargetsCategory, { iconName: 'folder' });
-                targetsItem.description = `${targets.length}`;
+            const unknownTargets = this.selectedWorkspaceMember === 'all'
+                ? []
+                : this.detectUnregisteredTargetsFunc(workspaceFolder.uri.fsPath, targetMemberPath);
+            if (targets.length > 0 || unknownTargets.length > 0) {
+                // we color icon red when unknown targets exist
+                const targetsItem = unknownTargets.length > 0
+                    ? new CargoTreeItem('Targets', vscode.TreeItemCollapsibleState.Expanded, TreeItemContext.TargetsCategory)
+                    : new CargoTreeItem('Targets', vscode.TreeItemCollapsibleState.Expanded, TreeItemContext.TargetsCategory, { iconName: 'folder' });
+                    
+                const checkedCount = targets.filter(t => this.checkedTargets.has(t.name)).length;
+                targetsItem.description = `${targets.length}${checkedCount > 0 ? ` ✓${checkedCount}` : ''}`;
+                if (checkedCount > 0) {
+                    const checkedByType: { [key: string]: string[] } = {};
+                    targets.forEach(t => {
+                        if (this.checkedTargets.has(t.name)) {
+                            if (!checkedByType[t.type]) checkedByType[t.type] = [];
+                            checkedByType[t.type].push(t.name);
+                        }
+                    });
+                    const tooltipLines = Object.entries(checkedByType).map(([type, names]) => `${type}: ${names.join(', ')}`);
+                    targetsItem.tooltip = `Selected targets:\n${tooltipLines.join('\n')}`;
+                }
+                
+                if (unknownTargets.length > 0) {
+                    targetsItem.resourceUri = vscode.Uri.parse(`cargui-targets-category:has-unknowns`);
+                    targetsItem.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor('charts.red'));
+                    console.log('[cargUI] Targets category has', unknownTargets.length, 'unknown targets, resourceUri set');
+                }
+                
                 items.push(targetsItem);
             }
 
@@ -731,12 +976,37 @@ export class CargoTreeDataProvider implements
             const featureMemberPath = this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all'
                 ? workspaceMembers.find(m => m.name === this.selectedWorkspaceMember)?.path
                 : undefined;
-            const features = this.selectedWorkspaceMember === 'all'
+            // Don't show features when no member selected or 'all' selected - features are member-specific
+            const features = (this.selectedWorkspaceMember === 'all' || !this.selectedWorkspaceMember)
                 ? []
                 : discoverCargoFeatures(workspaceFolder.uri.fsPath, featureMemberPath);
-            if (features.length > 0) {
-                const featuresItem = new CargoTreeItem('Features', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.FeaturesCategory, { iconName: 'symbol-misc' });
-                featuresItem.description = `${features.length}`;
+            const undeclaredFeatures = (this.selectedWorkspaceMember === 'all' || !this.selectedWorkspaceMember)
+                ? []
+                : detectUndeclaredFeatures(workspaceFolder.uri.fsPath, featureMemberPath);
+            const totalFeatures = features.length + undeclaredFeatures.length;
+            
+            if (totalFeatures > 0) {
+                // we color icon red when undeclared features exist
+                const featuresItem = undeclaredFeatures.length > 0
+                    ? new CargoTreeItem('Features', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.FeaturesCategory)
+                    : new CargoTreeItem('Features', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.FeaturesCategory, { iconName: 'symbol-misc' });
+                    
+                const checkedCount = features.filter(f => this.checkedFeatures.has(f)).length + undeclaredFeatures.filter(f => this.checkedFeatures.has(f.name)).length;
+                featuresItem.description = `${totalFeatures}${checkedCount > 0 ? ` ✓${checkedCount}` : ''}`;
+                if (checkedCount > 0) {
+                    const checkedFeatures = features.filter(f => this.checkedFeatures.has(f));
+                    const checkedUndeclared = undeclaredFeatures.filter(f => this.checkedFeatures.has(f.name));
+                    const allChecked = [...checkedFeatures, ...checkedUndeclared.map(f => f.name)];
+                    featuresItem.tooltip = `Selected features:\n${allChecked.join('\n')}`;
+                }
+                
+                // we store undeclared count to conditionally show "Declare Selected" in context menu
+                if (undeclaredFeatures.length > 0) {
+                    featuresItem.resourceUri = vscode.Uri.parse(`cargui-features-category:has-undeclared`);
+                    featuresItem.iconPath = new vscode.ThemeIcon('symbol-misc', new vscode.ThemeColor('charts.red'));
+                    console.log('[cargUI] Features category has', undeclaredFeatures.length, 'undeclared features, resourceUri set');
+                }
+                
                 items.push(featuresItem);
             }
 
@@ -745,13 +1015,40 @@ export class CargoTreeDataProvider implements
             const argCategories = config.get<ArgumentCategory[]>('argumentCategories') || [];
             const totalArgs = argCategories.reduce((sum, cat) => sum + cat.arguments.length, 0);
             const argumentsItem = new CargoTreeItem('Arguments', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.ArgumentsCategory, { iconName: 'symbol-parameter' });
-            argumentsItem.description = `${totalArgs}`;
+            const checkedArgCount = Array.from(this.checkedArguments).length;
+            argumentsItem.description = `${totalArgs}${checkedArgCount > 0 ? ` ✓${checkedArgCount}` : ''}`;
+            if (checkedArgCount > 0) {
+                const checkedArgsByCategory: { [key: string]: string[] } = { 'uncategorized': [] };
+                Array.from(this.checkedArguments).forEach(arg => {
+                    let found = false;
+                    for (const cat of argCategories) {
+                        if (cat.arguments.includes(arg)) {
+                            if (!checkedArgsByCategory[cat.name]) checkedArgsByCategory[cat.name] = [];
+                            checkedArgsByCategory[cat.name].push(arg);
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        checkedArgsByCategory['uncategorized'].push(arg);
+                    }
+                });
+                const tooltipLines = Object.entries(checkedArgsByCategory)
+                    .filter(([_, args]) => args.length > 0)
+                    .map(([cat, args]) => `${cat}: ${args.join(', ')}`);
+                argumentsItem.tooltip = `Selected arguments:\n${tooltipLines.join('\n')}`;
+            }
             items.push(argumentsItem);
 
             // Environment Variables
             const envVars = config.get<string[]>('environmentVariables') || [];
             const envVarsItem = new CargoTreeItem('Environment Variables', vscode.TreeItemCollapsibleState.Collapsed, TreeItemContext.EnvVarsCategory, { iconName: 'symbol-variable' });
-            envVarsItem.description = `${envVars.length}`;
+            const checkedEnvCount = Array.from(this.checkedEnvVars).length;
+            envVarsItem.description = `${envVars.length}${checkedEnvCount > 0 ? ` ✓${checkedEnvCount}` : ''}`;
+            if (checkedEnvCount > 0) {
+                const checkedEnv = Array.from(this.checkedEnvVars);
+                envVarsItem.tooltip = `Selected environment variables:\n${checkedEnv.join('\n')}`;
+            }
             items.push(envVarsItem);
 
             // Separator before commands/deps group
@@ -785,15 +1082,10 @@ export class CargoTreeDataProvider implements
                     iconName = 'home';
                 }
                 
-                // Use folder context for multi-member workspaces, item context for single
-                const contextValue = workspaceMembers.length > 1 
-                    ? TreeItemContext.WorkspaceMemberFolder 
-                    : TreeItemContext.WorkspaceMember;
-                
                 const memberItem = new CargoTreeItem(
                     member.name,
-                    workspaceMembers.length > 1 ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.None,
-                    contextValue,
+                    vscode.TreeItemCollapsibleState.None,
+                    TreeItemContext.WorkspaceMember,
                     {
                         iconName: iconName,
                         workspaceMember: member.name
@@ -803,6 +1095,16 @@ export class CargoTreeDataProvider implements
                 // Show relative path for non-root members
                 if (!member.isRoot && member.path && member.path !== '.') {
                     memberItem.description = member.path;
+                }
+                
+                // we set resourceUri on all members to enable context menu
+                // selected members get a different uri for styling
+                if (isSelected) {
+                    memberItem.resourceUri = vscode.Uri.parse('cargui-workspace-deps:selected-member');
+                    memberItem.iconPath = new vscode.ThemeIcon(iconName, new vscode.ThemeColor('charts.orange'));
+                } else {
+                    // unselected members also get the resourceUri so context menu works
+                    memberItem.resourceUri = vscode.Uri.parse('cargui-workspace-deps:member');
                 }
                 
                 // Make workspace members checkable
@@ -926,20 +1228,48 @@ export class CargoTreeDataProvider implements
                     item.description = '✓ Active';
                 }
                 
-                // Build tooltip with workspace information
-                let tooltipText = `Mode: ${snapshot.mode}\nTargets: ${snapshot.targets.length}\nFeatures: ${snapshot.features.length}\nArguments: ${snapshot.arguments.length}\nEnv Vars: ${snapshot.envVars.length}`;
-                
-                if (snapshot.workspaceMember) {
-                    tooltipText += `\nWorkspace Member: ${snapshot.workspaceMember}`;
-                }
-                
-                if (snapshot.checkedWorkspaceMembers && snapshot.checkedWorkspaceMembers.length > 0) {
-                    tooltipText += `\nChecked Members: ${snapshot.checkedWorkspaceMembers.join(', ')}`;
-                }
-                
-                item.tooltip = tooltipText;
-                
-                return item;
+            // Build tooltip with workspace information
+            let tooltipText = '';
+            
+            if (snapshot.workspaceMember) {
+                tooltipText = `Workspace Member: ${snapshot.workspaceMember}\nMode: ${snapshot.mode}`;
+            } else {
+                tooltipText = `Mode: ${snapshot.mode}`;
+            }
+            
+            // Itemize targets
+            if (snapshot.targets.length > 0) {
+                tooltipText += `\n\nTargets (${snapshot.targets.length}):\n` + snapshot.targets.map(t => `  • ${t}`).join('\n');
+            } else {
+                tooltipText += `\n\nTargets: 0`;
+            }
+            
+            // Itemize features
+            if (snapshot.features.length > 0) {
+                tooltipText += `\n\nFeatures (${snapshot.features.length}):\n` + snapshot.features.map(f => `  • ${f}`).join('\n');
+            } else {
+                tooltipText += `\n\nFeatures: 0`;
+            }
+            
+            // Itemize arguments
+            if (snapshot.arguments.length > 0) {
+                tooltipText += `\n\nArguments (${snapshot.arguments.length}):\n` + snapshot.arguments.map(a => `  • ${a}`).join('\n');
+            } else {
+                tooltipText += `\n\nArguments: 0`;
+            }
+            
+            // Itemize environment variables
+            if (snapshot.envVars.length > 0) {
+                tooltipText += `\n\nEnv Vars (${snapshot.envVars.length}):\n` + snapshot.envVars.map(e => `  • ${e}`).join('\n');
+            } else {
+                tooltipText += `\n\nEnv Vars: 0`;
+            }
+            
+            if (snapshot.checkedWorkspaceMembers && snapshot.checkedWorkspaceMembers.length > 0) {
+                tooltipText += `\n\nChecked Members (${snapshot.checkedWorkspaceMembers.length}):\n` + snapshot.checkedWorkspaceMembers.map(m => `  • ${m}`).join('\n');
+            }
+            
+            item.tooltip = tooltipText;                return item;
             }));
         } else if (element.contextValue === TreeItemContext.EnvVarsCategory) {
             // Environment Variables category children
@@ -1060,14 +1390,14 @@ export class CargoTreeDataProvider implements
                 return item;
             }));
         } else if (element.contextValue === TreeItemContext.ArgumentsCategory) {
-            // Arguments category children - show uncategorized arguments THEN subcategories
+            // Arguments category children - show uncategorized arguments first, then subcategories
             const config = vscode.workspace.getConfiguration('cargui');
             const argCategories = config.get<ArgumentCategory[]>('argumentCategories') || [];
             const strays = config.get<string[]>('arguments') || [];
             
             const items: CargoTreeItem[] = [];
             
-            // Add uncategorized arguments FIRST
+            // Add uncategorized arguments first
             items.push(...strays.map(arg => {
                 const displayLabel = arg.startsWith('--') ? arg.substring(2) : arg;
                 
@@ -1097,8 +1427,9 @@ export class CargoTreeDataProvider implements
                 return item;
             }));
             
-            // Add subcategories AFTER
+            // Add subcategories
             items.push(...argCategories.map(category => {
+                const checkedCount = category.arguments.filter(arg => this.checkedArguments.has(arg)).length;
                 const item = new CargoTreeItem(
                     category.name,
                     vscode.TreeItemCollapsibleState.Collapsed,
@@ -1109,7 +1440,7 @@ export class CargoTreeDataProvider implements
                     }
                 );
                 item.tooltip = `${category.name} (${category.arguments.length} arguments)`;
-                item.description = `${category.arguments.length}`;
+                item.description = `${category.arguments.length}${checkedCount > 0 ? ` ✓${checkedCount}` : ''}`;
                 
                 return item;
             }));
@@ -1164,34 +1495,73 @@ export class CargoTreeDataProvider implements
                 ? workspaceMembers.find(m => m.name === this.selectedWorkspaceMember)?.path
                 : undefined;
             const features = discoverCargoFeatures(workspaceFolder.uri.fsPath, featureMemberPath);
+            const undeclaredFeatures = detectUndeclaredFeatures(workspaceFolder.uri.fsPath, featureMemberPath);
             
-            return Promise.resolve(features.map(feature => {
-                const item = new CargoTreeItem(
-                    feature,
-                    vscode.TreeItemCollapsibleState.None,
-                    TreeItemContext.Feature,
-                    {
-                        iconName: 'symbol-key',
-                        feature: feature
+            const allFeatureItems = [
+                ...features.map(feature => {
+                    const item = new CargoTreeItem(
+                        feature,
+                        vscode.TreeItemCollapsibleState.None,
+                        TreeItemContext.Feature,
+                        {
+                            iconName: 'symbol-key',
+                            feature: feature
+                        }
+                    );
+                    item.tooltip = `Feature: ${feature}`;
+                    
+                    // Make features checkable
+                    const isChecked = this.checkedFeatures.has(feature);
+                    item.checkboxState = isChecked 
+                        ? vscode.TreeItemCheckboxState.Checked 
+                        : vscode.TreeItemCheckboxState.Unchecked;
+                    
+                    // we find where the feature is used in code and open that file/line
+                    item.command = {
+                        command: 'cargui.viewFeatureUsage',
+                        title: 'View Feature Usage',
+                        arguments: [feature, featureMemberPath]
+                    };
+                    
+                    return item;
+                }),
+                ...undeclaredFeatures.map(feature => {
+                    const item = new CargoTreeItem(
+                        feature.name,
+                        vscode.TreeItemCollapsibleState.None,
+                        TreeItemContext.UndeclaredFeature,
+                        {
+                            iconName: 'symbol-key',
+                            feature: feature.name
+                        }
+                    );
+                    item.tooltip = `Undeclared feature: ${feature.name}\nAdd to [features] section in Cargo.toml`;
+                    
+                    // we apply red coloring to undeclared features (both icon and text)
+                    item.iconPath = new vscode.ThemeIcon('symbol-key', new vscode.ThemeColor('charts.red'));
+                    item.resourceUri = vscode.Uri.parse(`cargui-feature:undeclared-${feature.name}`);
+                    if (this.decorationProvider) {
+                        this.decorationProvider.setTargetColor(`undeclared-${feature.name}`, 'charts.red');
                     }
-                );
-                item.tooltip = `Feature: ${feature}`;
-                
-                // Make features checkable
-                const isChecked = this.checkedFeatures.has(feature);
-                item.checkboxState = isChecked 
-                    ? vscode.TreeItemCheckboxState.Checked 
-                    : vscode.TreeItemCheckboxState.Unchecked;
-                
-                // Clicking the label opens Cargo.toml
-                item.command = {
-                    command: 'cargui.viewFeatureInCargoToml',
-                    title: 'View Feature in Cargo.toml',
-                    arguments: [item]
-                };
-                
-                return item;
-            }));
+                    
+                    // Make features checkable
+                    const isChecked = this.checkedFeatures.has(feature.name);
+                    item.checkboxState = isChecked 
+                        ? vscode.TreeItemCheckboxState.Checked 
+                        : vscode.TreeItemCheckboxState.Unchecked;
+                    
+                    // we find where the feature is used in code and open that file/line
+                    item.command = {
+                        command: 'cargui.viewFeatureUsage',
+                        title: 'View Feature Usage',
+                        arguments: [feature.name, featureMemberPath]
+                    };
+                    
+                    return item;
+                })
+            ];
+            
+            return Promise.resolve(allFeatureItems);
         } else if (element.contextValue === TreeItemContext.DependenciesCategory) {
             // Dependencies category children - show subfolders (WORKSPACE/Production/Dev/Build)
             const items: CargoTreeItem[] = [];
@@ -1208,12 +1578,16 @@ export class CargoTreeDataProvider implements
                     iconName: 'star-full',
                     categoryName: 'workspace'
                 });
-                workspaceItem.description = `${dependencies.workspace.length}`;
-                // Color workspace category yellow
-                workspaceItem.resourceUri = vscode.Uri.parse(`cargui-dep:workspace-category`);
-                if (this.decorationProvider) {
-                    this.decorationProvider.markAsInherited('workspace-category');
+                // Color the star icon orange
+                workspaceItem.iconPath = new vscode.ThemeIcon('star-full', new vscode.ThemeColor('charts.orange'));
+                const checkedCount = dependencies.workspace.filter(d => this.checkedDependencies.has(d.name)).length;
+                workspaceItem.description = `${dependencies.workspace.length}${checkedCount > 0 ? ` ✓${checkedCount}` : ''}`;
+                if (checkedCount > 0) {
+                    const checkedDeps = dependencies.workspace.filter(d => this.checkedDependencies.has(d.name)).map(d => d.name);
+                    workspaceItem.tooltip = `Selected workspace dependencies:\n${checkedDeps.join('\n')}`;
                 }
+                // Color workspace category orange
+                workspaceItem.resourceUri = vscode.Uri.parse(`cargui-workspace-deps:workspace-category`);
                 items.push(workspaceItem);
             }
             
@@ -1223,7 +1597,12 @@ export class CargoTreeDataProvider implements
                     iconName: 'package',
                     categoryName: 'production'
                 });
-                productionItem.description = `${dependencies.production.length}`;
+                const checkedCount = dependencies.production.filter(d => this.checkedDependencies.has(d.name)).length;
+                productionItem.description = `${dependencies.production.length}${checkedCount > 0 ? ` ✓${checkedCount}` : ''}`;
+                if (checkedCount > 0) {
+                    const checkedDeps = dependencies.production.filter(d => this.checkedDependencies.has(d.name)).map(d => d.name);
+                    productionItem.tooltip = `Selected production dependencies:\n${checkedDeps.join('\n')}`;
+                }
                 items.push(productionItem);
             }
             
@@ -1233,7 +1612,12 @@ export class CargoTreeDataProvider implements
                     iconName: 'beaker',
                     categoryName: 'dev'
                 });
-                devItem.description = `${dependencies.dev.length}`;
+                const checkedCount = dependencies.dev.filter(d => this.checkedDependencies.has(d.name)).length;
+                devItem.description = `${dependencies.dev.length}${checkedCount > 0 ? ` ✓${checkedCount}` : ''}`;
+                if (checkedCount > 0) {
+                    const checkedDeps = dependencies.dev.filter(d => this.checkedDependencies.has(d.name)).map(d => d.name);
+                    devItem.tooltip = `Selected dev dependencies:\n${checkedDeps.join('\n')}`;
+                }
                 items.push(devItem);
             }
             
@@ -1243,7 +1627,12 @@ export class CargoTreeDataProvider implements
                     iconName: 'tools',
                     categoryName: 'build'
                 });
-                buildItem.description = `${dependencies.build.length}`;
+                const checkedCount = dependencies.build.filter(d => this.checkedDependencies.has(d.name)).length;
+                buildItem.description = `${dependencies.build.length}${checkedCount > 0 ? ` ✓${checkedCount}` : ''}`;
+                if (checkedCount > 0) {
+                    const checkedDeps = dependencies.build.filter(d => this.checkedDependencies.has(d.name)).map(d => d.name);
+                    buildItem.tooltip = `Selected build dependencies:\n${checkedDeps.join('\n')}`;
+                }
                 items.push(buildItem);
             }
             
@@ -1272,7 +1661,11 @@ export class CargoTreeDataProvider implements
                     iconName: 'library',
                     categoryName: 'lib'
                 });
-                libItem.description = `${libCount}`;
+                const checkedLibs = allTargets.filter(t => t.type === 'lib' && this.checkedTargets.has(t.name));
+                libItem.description = `${libCount}${checkedLibs.length > 0 ? ` ✓${checkedLibs.length}` : ''}`;
+                if (checkedLibs.length > 0) {
+                    libItem.tooltip = `Selected libraries:\n${checkedLibs.map(t => t.name).join('\n')}`;
+                }
                 items.push(libItem);
             }
             if (binCount > 0) {
@@ -1280,7 +1673,11 @@ export class CargoTreeDataProvider implements
                     iconName: 'file-binary',
                     categoryName: 'bin'
                 });
-                binItem.description = `${binCount}`;
+                const checkedBins = allTargets.filter(t => t.type === 'bin' && this.checkedTargets.has(t.name));
+                binItem.description = `${binCount}${checkedBins.length > 0 ? ` ✓${checkedBins.length}` : ''}`;
+                if (checkedBins.length > 0) {
+                    binItem.tooltip = `Selected binaries:\n${checkedBins.map(t => t.name).join('\n')}`;
+                }
                 items.push(binItem);
             }
             if (exampleCount > 0) {
@@ -1288,7 +1685,11 @@ export class CargoTreeDataProvider implements
                     iconName: 'note',
                     categoryName: 'example'
                 });
-                exampleItem.description = `${exampleCount}`;
+                const checkedExamples = allTargets.filter(t => t.type === 'example' && this.checkedTargets.has(t.name));
+                exampleItem.description = `${exampleCount}${checkedExamples.length > 0 ? ` ✓${checkedExamples.length}` : ''}`;
+                if (checkedExamples.length > 0) {
+                    exampleItem.tooltip = `Selected examples:\n${checkedExamples.map(t => t.name).join('\n')}`;
+                }
                 items.push(exampleItem);
             }
             if (testCount > 0) {
@@ -1296,7 +1697,11 @@ export class CargoTreeDataProvider implements
                     iconName: 'beaker',
                     categoryName: 'test'
                 });
-                testItem.description = `${testCount}`;
+                const checkedTests = allTargets.filter(t => t.type === 'test' && this.checkedTargets.has(t.name));
+                testItem.description = `${testCount}${checkedTests.length > 0 ? ` ✓${checkedTests.length}` : ''}`;
+                if (checkedTests.length > 0) {
+                    testItem.tooltip = `Selected tests:\n${checkedTests.map(t => t.name).join('\n')}`;
+                }
                 items.push(testItem);
             }
             if (benchCount > 0) {
@@ -1304,7 +1709,11 @@ export class CargoTreeDataProvider implements
                     iconName: 'dashboard',
                     categoryName: 'bench'
                 });
-                benchItem.description = `${benchCount}`;
+                const checkedBenches = allTargets.filter(t => t.type === 'bench' && this.checkedTargets.has(t.name));
+                benchItem.description = `${benchCount}${checkedBenches.length > 0 ? ` ✓${checkedBenches.length}` : ''}`;
+                if (checkedBenches.length > 0) {
+                    benchItem.tooltip = `Selected benchmarks:\n${checkedBenches.map(t => t.name).join('\n')}`;
+                }
                 items.push(benchItem);
             }
             
@@ -1343,9 +1752,10 @@ export class CargoTreeDataProvider implements
             // Helper function to determine target status for color coding
             const getTargetStatus = (target: CargoTarget): {
                 color: string | undefined;
+                reason?: string;
             } => {
                 if (!target.path) {
-                    return { color: 'charts.red' }; // Unknown - no path
+                    return { color: 'charts.red', reason: 'Unknown path' }; // Unknown - no path
                 }
 
                 // Determine standard location based on target type
@@ -1355,15 +1765,18 @@ export class CargoTreeDataProvider implements
                 const pathDir = path.dirname(normalizedPath);
                 
                 // Check if the target name matches the file stem (without extension)
+                // Cargo treats hyphens and underscores as equivalent in target names
                 const fileStem = filename.replace(/\.rs$/, '');
-                const nameMatchesFile = target.name === fileStem || target.name === 'main' || target.name === 'lib';
+                const normalizedName = target.name.replace(/-/g, '_');
+                const normalizedFileStem = fileStem.replace(/-/g, '_');
+                const nameMatchesFile = normalizedName === normalizedFileStem || target.name === 'main' || target.name === 'lib';
                 
                 if (target.type === 'lib') {
                     // Libraries are always at src/lib.rs (standard location)
                     if (normalizedPath === 'src/lib.rs') {
                         return { color: undefined }; // Standard location - no color
                     } else {
-                        return { color: 'charts.blue' }; // Custom location
+                        return { color: 'charts.blue', reason: 'Custom location (not in standard directory)' }; // Custom location
                     }
                 } else if (target.type === 'bin') {
                     if (target.path === 'src/main.rs') {
@@ -1373,39 +1786,67 @@ export class CargoTreeDataProvider implements
                     }
                     
                     // Check if bin is in wrong location (e.g., in examples/, tests/, benches/)
-                    if (pathDir.startsWith('examples') || pathDir.startsWith('tests') || pathDir.startsWith('benches')) {
-                        return { color: 'charts.orange' }; // Incorrect - wrong type for location
+                    if (pathDir.startsWith('examples')) {
+                        return { color: 'charts.yellow', reason: 'Binary declared in examples/ directory' };
+                    } else if (pathDir.startsWith('tests')) {
+                        return { color: 'charts.yellow', reason: 'Binary declared in tests/ directory' };
+                    } else if (pathDir.startsWith('benches')) {
+                        return { color: 'charts.yellow', reason: 'Binary declared in benches/ directory' };
                     }
                 } else if (target.type === 'example') {
                     // Examples can be in examples/ directory (single file or directory with main.rs)
                     // Check if it's anywhere in the examples/ folder - that's standard
                     if (pathDir.startsWith('examples')) {
+                        // Check if name matches file
+                        if (!nameMatchesFile) {
+                            return { color: 'charts.yellow', reason: `Target name "${target.name}" doesn't match filename "${fileStem}"` };
+                        }
                         return { color: undefined }; // Standard location - no color
                     }
                     
                     // Check if example is in wrong location
-                    if (pathDir.startsWith('src/bin') || pathDir.startsWith('tests') || pathDir.startsWith('benches')) {
-                        return { color: 'charts.orange' }; // Incorrect - wrong type for location
+                    if (pathDir.startsWith('src/bin')) {
+                        return { color: 'charts.yellow', reason: 'Example declared in src/bin/ directory' };
+                    } else if (pathDir.startsWith('tests')) {
+                        return { color: 'charts.yellow', reason: 'Example declared in tests/ directory' };
+                    } else if (pathDir.startsWith('benches')) {
+                        return { color: 'charts.yellow', reason: 'Example declared in benches/ directory' };
                     }
                 } else if (target.type === 'test') {
                     // Tests can be in tests/ directory (single file or directory with main.rs)
                     if (pathDir.startsWith('tests')) {
+                        // Check if name matches file
+                        if (!nameMatchesFile) {
+                            return { color: 'charts.yellow', reason: `Target name "${target.name}" doesn't match filename "${fileStem}"` };
+                        }
                         return { color: undefined }; // Standard location - no color
                     }
                     
                     // Check if test is in wrong location
-                    if (pathDir.startsWith('src/bin') || pathDir.startsWith('examples') || pathDir.startsWith('benches')) {
-                        return { color: 'charts.orange' }; // Incorrect - wrong type for location
+                    if (pathDir.startsWith('src/bin')) {
+                        return { color: 'charts.yellow', reason: 'Test declared in src/bin/ directory' };
+                    } else if (pathDir.startsWith('examples')) {
+                        return { color: 'charts.yellow', reason: 'Test declared in examples/ directory' };
+                    } else if (pathDir.startsWith('benches')) {
+                        return { color: 'charts.yellow', reason: 'Test declared in benches/ directory' };
                     }
                 } else if (target.type === 'bench') {
                     // Benches can be in benches/ directory (single file or directory with main.rs)
                     if (pathDir.startsWith('benches')) {
+                        // Check if name matches file
+                        if (!nameMatchesFile) {
+                            return { color: 'charts.yellow', reason: `Target name "${target.name}" doesn't match filename "${fileStem}"` };
+                        }
                         return { color: undefined }; // Standard location - no color
                     }
                     
                     // Check if bench is in wrong location
-                    if (pathDir.startsWith('src/bin') || pathDir.startsWith('examples') || pathDir.startsWith('tests')) {
-                        return { color: 'charts.orange' }; // Incorrect - wrong type for location
+                    if (pathDir.startsWith('src/bin')) {
+                        return { color: 'charts.yellow', reason: 'Benchmark declared in src/bin/ directory' };
+                    } else if (pathDir.startsWith('examples')) {
+                        return { color: 'charts.yellow', reason: 'Benchmark declared in examples/ directory' };
+                    } else if (pathDir.startsWith('tests')) {
+                        return { color: 'charts.yellow', reason: 'Benchmark declared in tests/ directory' };
                     }
                 }
 
@@ -1416,12 +1857,12 @@ export class CargoTreeDataProvider implements
                 // Target is correctly declared and in standard location
                 // But check if name matches file
                 if (!nameMatchesFile && target.path !== 'src/main.rs' && target.path !== 'src/lib.rs') {
-                    return { color: 'charts.orange' }; // Incorrect - name mismatch in standard location
+                    return { color: 'charts.yellow', reason: `Target name "${target.name}" doesn't match filename "${fileStem}"` };
                 }
                 return { color: undefined }; // No color (default)
             } else {
                 // Target is declared but in custom location (lighter yellow for custom, regardless of name)
-                return { color: 'charts.blue' };
+                return { color: 'charts.blue', reason: 'Custom location (not in standard directory)' };
             }
         };            return Promise.resolve(targets.map(target => {
                 const isMainTarget = target.type === 'bin' && target.path === 'src/main.rs';
@@ -1454,12 +1895,8 @@ export class CargoTreeDataProvider implements
                 
                 // Create tooltip with color coding explanation
                 let tooltipText = target.path || target.name;
-                if (targetStatus.color === 'charts.blue') {
-                    tooltipText += '\n⚠️ Custom location (not in standard directory)';
-                } else if (targetStatus.color === 'charts.orange') {
-                    tooltipText += '\n⚠️ Incorrect declaration (wrong name or location for type)';
-                } else if (targetStatus.color === 'charts.red') {
-                    tooltipText += '\n❌ Unknown path';
+                if (targetStatus.reason) {
+                    tooltipText += '\n⚠️ ' + targetStatus.reason;
                 }
                 item.tooltip = tooltipText;
                 item.target = target;
@@ -1472,8 +1909,8 @@ export class CargoTreeDataProvider implements
                 // Set resourceUri for file decoration (enables text coloring like dependencies)
                 item.resourceUri = vscode.Uri.parse(`cargui-target:${target.name}`);
                 
-                // Apply color via decoration provider
-                if (targetStatus.color && this.decorationProvider) {
+                // Apply color via decoration provider (or clear it if no issues)
+                if (this.decorationProvider) {
                     this.decorationProvider.setTargetColor(target.name, targetStatus.color);
                 }
                 
@@ -1535,7 +1972,19 @@ export class CargoTreeDataProvider implements
                         const versions = await fetchCrateVersions(dep.name);
                         const latestVersion = versions.length > 0 ? versions[0] : null;
                         
-                        if (latestVersion === dep.version) {
+                        // Normalize versions for comparison: treat "2.10" and "2.10.0" as equivalent
+                        const normalizeVersion = (ver: string) => {
+                            const parts = ver.split('.');
+                            while (parts.length < 3) {
+                                parts.push('0');
+                            }
+                            return parts.join('.');
+                        };
+                        
+                        const normalizedCurrent = normalizeVersion(dep.version);
+                        const normalizedLatest = latestVersion ? normalizeVersion(latestVersion) : null;
+                        
+                        if (normalizedLatest && normalizedCurrent === normalizedLatest) {
                             isLatest = true;
                             description = dep.version;
                             tooltip += ` = "${dep.version}"`;
@@ -1621,55 +2070,105 @@ export class CargoTreeDataProvider implements
                 });
             }));
         } else if (element.contextValue === TreeItemContext.UnknownsFolder) {
-            // Show unregistered targets
-            const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
-            const targetMemberPath = this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all'
-                ? workspaceMembers.find(m => m.name === this.selectedWorkspaceMember)?.path
-                : undefined;
-            const unknownTargets = this.detectUnregisteredTargetsFunc(workspaceFolder.uri.fsPath, targetMemberPath);
-            
-            return Promise.resolve(unknownTargets.map(unknown => {
-                const item = new CargoTreeItem(
-                    unknown.name,
-                    vscode.TreeItemCollapsibleState.None,
-                    TreeItemContext.UnknownTarget,
-                    {
-                        iconName: 'question',
-                        unknownData: unknown
+            // we check if this is the undeclared features folder or unknowns folder based on resourceUri
+            if (element.resourceUri?.scheme === 'cargui-target' && element.resourceUri.authority === 'undeclared-features-folder') {
+                // Show undeclared features
+                const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+                const targetMemberPath = this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all'
+                    ? workspaceMembers.find(m => m.name === this.selectedWorkspaceMember)?.path
+                    : undefined;
+                const undeclaredFeatures = detectUndeclaredFeatures(workspaceFolder.uri.fsPath, targetMemberPath);
+                
+                return Promise.resolve(undeclaredFeatures.map(feature => {
+                    const item = new CargoTreeItem(
+                        feature.name,
+                        vscode.TreeItemCollapsibleState.None,
+                        TreeItemContext.UnknownTarget,
+                        {
+                            iconName: 'symbol-key',
+                            unknownData: feature
+                        }
+                    );
+                    item.tooltip = `Undeclared feature: ${feature.name}\nAdd to [features] section in Cargo.toml`;
+                    
+                    // Set resourceUri for file decoration
+                    item.resourceUri = vscode.Uri.parse(`cargui-target:undeclared-feature-${feature.name}`);
+                    
+                    // Apply orange color
+                    if (this.decorationProvider) {
+                        this.decorationProvider.setTargetColor(`undeclared-feature-${feature.name}`, 'charts.orange');
                     }
-                );
-                item.description = unknown.path;
-                item.tooltip = `Drag to a target type folder to register\nPath: ${unknown.path}`;
+                    
+                    item.iconPath = new vscode.ThemeIcon('symbol-key', new vscode.ThemeColor('charts.orange'));
+                    
+                    return item;
+                }));
+            } else {
+                // Show unregistered targets
+                const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+                const targetMemberPath = this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all'
+                    ? workspaceMembers.find(m => m.name === this.selectedWorkspaceMember)?.path
+                    : undefined;
+                const unknownTargets = this.detectUnregisteredTargetsFunc(workspaceFolder.uri.fsPath, targetMemberPath);
                 
-                // Set resourceUri for file decoration (enables text coloring)
-                item.resourceUri = vscode.Uri.parse(`cargui-target:unknown-${unknown.name}`);
-                
-                // Apply red color via decoration provider
-                if (this.decorationProvider) {
-                    this.decorationProvider.setTargetColor(`unknown-${unknown.name}`, 'charts.red');
-                }
-                
-                // Also apply icon color
-                item.iconPath = new vscode.ThemeIcon('question', new vscode.ThemeColor('charts.red'));
-                
-                // The unknown target data is already stored in the item from constructor
-                
-                // Create a temporary target object for view commands
-                item.target = {
-                    name: unknown.name,
-                    type: 'bin', // Placeholder type for view commands
-                    path: unknown.path || ''
-                };
-                
-                // Add click command to open the file
-                item.command = {
-                    command: 'cargui.viewBinaryTarget',
-                    title: 'View Target File',
-                    arguments: [item]
-                };
-                
-                return item;
-            }));
+                return Promise.resolve(unknownTargets.map(unknown => {
+                    // Use type-specific icon based on directory location
+                    let iconName = 'question';
+                    if (unknown.type === 'example') {
+                        iconName = 'note';
+                    } else if (unknown.type === 'test') {
+                        iconName = 'beaker';
+                    } else if (unknown.type === 'bench') {
+                        iconName = 'dashboard';
+                    } else if (unknown.type === 'bin') {
+                        iconName = 'file-binary';
+                    }
+                    
+                    const item = new CargoTreeItem(
+                        unknown.name,
+                        vscode.TreeItemCollapsibleState.None,
+                        TreeItemContext.UnknownTarget,
+                        {
+                            iconName: iconName,
+                            unknownData: unknown
+                        }
+                    );
+                    item.description = unknown.path;
+                    item.tooltip = `Drag to a target type folder to register\nPath: ${unknown.path}`;
+                    
+                    // Set workspace member for proper path resolution
+                    item.workspaceMember = unknown.memberName;
+                    
+                    // Set resourceUri for file decoration (enables text coloring)
+                    item.resourceUri = vscode.Uri.parse(`cargui-target:unknown-${unknown.name}`);
+                    
+                    // Apply red color via decoration provider
+                    if (this.decorationProvider) {
+                        this.decorationProvider.setTargetColor(`unknown-${unknown.name}`, 'charts.red');
+                    }
+                    
+                    // Also apply icon color
+                    item.iconPath = new vscode.ThemeIcon(iconName, new vscode.ThemeColor('charts.red'));
+                    
+                    // The unknown target data is already stored in the item from constructor
+                    
+                    // Create a temporary target object for view commands
+                    item.target = {
+                        name: unknown.name,
+                        type: unknown.type === 'unknown' ? 'bin' : unknown.type as any,
+                        path: unknown.path || ''
+                    };
+                    
+                    // Add click command to open the file
+                    item.command = {
+                        command: 'cargui.viewBinaryTarget',
+                        title: 'View Target File',
+                        arguments: [item]
+                    };
+                    
+                    return item;
+                }));
+            }
         }
 
         return Promise.resolve([]);

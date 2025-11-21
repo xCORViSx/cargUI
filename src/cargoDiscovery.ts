@@ -210,7 +210,7 @@ export function discoverCargoTargets(workspacePath: string, memberPath?: string)
             const files = fs.readdirSync(examplesDir);
             for (const file of files) {
                 if (file.endsWith('.rs')) {
-                    const exampleName = file.replace('.rs', '').replace(/_/g, '-');
+                    const exampleName = file.replace('.rs', '');
                     const examplePath = `examples/${file}`;
                     // Only add if not already in manifest in ANY section (by name or path)
                     // This prevents files from examples/ that are registered as other types from appearing twice
@@ -257,7 +257,7 @@ export function discoverCargoTargets(workspacePath: string, memberPath?: string)
             const files = fs.readdirSync(testsDir);
             for (const file of files) {
                 if (file.endsWith('.rs')) {
-                    const testName = file.replace('.rs', '').replace(/_/g, '-');
+                    const testName = file.replace('.rs', '');
                     const testPath = `tests/${file}`;
                     // Only add if not already in manifest in ANY section (by name or path)
                     // This prevents files from tests/ that are registered as other types from appearing twice
@@ -304,7 +304,7 @@ export function discoverCargoTargets(workspacePath: string, memberPath?: string)
             const files = fs.readdirSync(benchesDir);
             for (const file of files) {
                 if (file.endsWith('.rs')) {
-                    const benchName = file.replace('.rs', '').replace(/_/g, '-');
+                    const benchName = file.replace('.rs', '');
                     const benchPath = `benches/${file}`;
                     // Only add if not already in manifest in ANY section (by name or path)
                     // This prevents files from benches/ that are registered as other types from appearing twice

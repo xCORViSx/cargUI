@@ -7,8 +7,6 @@ export const enum TreeItemContext {
     // Categories
     WorkspaceCategory = 'workspaceCategory',
     ModulesCategory = 'modulesCategory',
-    ModulesCategorySingle = 'modulesCategorySingle',
-    ModulesCategoryMulti = 'modulesCategoryMulti',
     DependenciesCategory = 'dependenciesCategory',
     SnapshotsCategory = 'snapshotsCategory',
     TargetsCategory = 'targetsCategory',
@@ -26,7 +24,6 @@ export const enum TreeItemContext {
     UnknownsFolder = 'unknownsFolder',
     ArgumentSubcategory = 'argumentSubcategory',
     CustomCommandSubcategory = 'customCommandSubcategory',
-    WorkspaceMemberFolder = 'workspaceMemberFolder',
     
     // Items
     WorkspaceMember = 'workspaceMember',
@@ -35,6 +32,7 @@ export const enum TreeItemContext {
     Target = 'target',
     UnknownTarget = 'unknownTarget',
     Feature = 'feature',
+    UndeclaredFeature = 'undeclaredFeature',
     Argument = 'argument',
     EnvVar = 'envVar',
     Snapshot = 'snapshot',
@@ -42,6 +40,7 @@ export const enum TreeItemContext {
     CustomCommand = 'customCommand',
     
     // Special
+    ProjectHeader = 'projectHeader',
     Mode = 'mode',
     WatchMode = 'watchMode',
     RustEdition = 'rustEdition',
@@ -55,11 +54,13 @@ export interface CargoTarget {
     type: 'lib' | 'bin' | 'example' | 'test' | 'bench';
     path?: string;
     requiredFeatures?: string[];
+    workspaceMember?: string;
 }
 
 export interface CargoManifest {
     package?: {
         name?: string;
+        version?: string;
     };
     workspace?: {
         members?: string[];
@@ -144,6 +145,8 @@ export interface ModuleInfo {
     isPublic?: boolean;          // Whether module is declared with 'pub mod'
     hasDocComment?: boolean;     // Whether module file has doc comments
     hasTests?: boolean;          // Whether module contains #[test] or #[cfg(test)]
+    totalElements?: number;      // Total count of code elements (structs, functions, enums, traits, etc.)
+    documentedElements?: number; // Count of code elements with doc comments
 }
 
 export interface RustupToolchainInfo {

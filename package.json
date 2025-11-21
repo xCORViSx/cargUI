@@ -2,7 +2,7 @@
   "name": "cargUI",
   "displayName": "cargUI",
   "description": "Native VSCode UI for Rust projects!",
-  "version": "1.0.5",
+  "version": "1.1.1",
   "publisher": "xCORViSx",
   "icon": "cargui-icon.png",
   "repository": {
@@ -17,6 +17,9 @@
   "engines": {
     "vscode": "^1.85.0"
   },
+  "extensionKind": [
+    "workspace"
+  ],
   "categories": [
     "Other"
   ],
@@ -65,12 +68,7 @@
         },
         "cargui.arguments": {
           "type": "array",
-          "default": [
-            "--verbose",
-            "--quiet",
-            "--color always",
-            "--jobs 4"
-          ],
+          "default": [],
           "description": "[DEPRECATED] Use cargui.argumentCategories instead. Old flat list of arguments for backward compatibility.",
           "items": {
             "type": "string"
@@ -87,6 +85,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "cargui.autoFormatCargoToml": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically format Cargo.toml after edits (adding dependencies, declaring features/targets, etc.)"
         },
         "cargui.rustup.checkStable": {
           "type": "boolean",
@@ -265,12 +268,6 @@
     },
     "commands": [
       {
-        "command": "cargui.open",
-        "title": "Show Cargo Quick Pick",
-        "category": "cargUI",
-        "icon": "$(list-tree)"
-      },
-      {
         "command": "cargui.new",
         "title": "New Project",
         "category": "cargUI",
@@ -368,25 +365,19 @@
       },
       {
         "command": "cargui.viewMemberCargoToml",
-        "title": "View Member's Cargo.toml",
+        "title": "View Cargo.toml",
+        "category": "cargUI",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "cargui.openProjectCargoToml",
+        "title": "View Cargo.toml",
         "category": "cargUI",
         "icon": "$(go-to-file)"
       },
       {
         "command": "cargui.viewBinaryTarget",
         "title": "View Target File",
-        "category": "cargUI",
-        "icon": "$(file-code)"
-      },
-      {
-        "command": "cargui.viewMainTargetFromModules",
-        "title": "View Main Target",
-        "category": "cargUI",
-        "icon": "$(file-code)"
-      },
-      {
-        "command": "cargui.viewMainTargetFromMember",
-        "title": "View Main Target",
         "category": "cargUI",
         "icon": "$(file-code)"
       },
@@ -510,6 +501,24 @@
         "icon": "$(trash)"
       },
       {
+        "command": "cargui.declareFeature",
+        "title": "Declare Feature in Cargo.toml",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.declareSelectedFeatures",
+        "title": "Declare Selected Features",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.declareAllUndeclaredFeatures",
+        "title": "Declare All Undeclared Features",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
         "command": "cargui.removeEnvironmentVariable",
         "title": "Remove Environment Variable",
         "category": "cargUI",
@@ -592,6 +601,12 @@
         "title": "Show Keybindings",
         "category": "cargUI",
         "icon": "$(keyboard)"
+      },
+      {
+        "command": "cargui.registerAllUnknownTargets",
+        "title": "Register All Unknown Targets",
+        "category": "cargUI",
+        "icon": "$(check-all)"
       },
       {
         "command": "cargui.registerAsBinary",
@@ -723,13 +738,43 @@
         "command": "cargui.toggleAllDependencies",
         "title": "Check All Dependencies",
         "category": "cargUI",
-        "icon": "$(checklist)"
+        "icon": "$(check-all)"
       },
       {
         "command": "cargui.toggleDependencyType",
         "title": "Check All",
         "category": "cargUI",
         "icon": "$(checklist)"
+      },
+      {
+        "command": "cargui.viewInMainTarget",
+        "title": "View main target",
+        "category": "cargUI",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "cargui.viewMemberMainTarget",
+        "title": "View main target",
+        "category": "cargUI",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "cargui.viewDocumentation",
+        "title": "View documentation",
+        "category": "cargUI",
+        "icon": "$(book)"
+      },
+      {
+        "command": "cargui.viewMemberDocs",
+        "title": "View documentation",
+        "category": "cargUI",
+        "icon": "$(book)"
+      },
+      {
+        "command": "cargui.resetSmartDetectionNotifications",
+        "title": "Reset Smart Detection Notifications",
+        "category": "cargUI",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -751,7 +796,7 @@
         },
         {
           "command": "cargui.test",
-          "when": "view == cargoTargets",
+          "when": "view == cargoTargets && !isWeb",
           "group": "navigation@4"
         },
         {
@@ -761,7 +806,7 @@
         },
         {
           "command": "cargui.clean",
-          "when": "view == cargoTargets",
+          "when": "view == cargoTargets && !isWeb",
           "group": "navigation@6"
         },
         {
@@ -771,27 +816,27 @@
         },
         {
           "command": "cargui.fmt",
-          "when": "view == cargoTargets",
+          "when": "view == cargoTargets && !isWeb",
           "group": "navigation@8"
         },
         {
           "command": "cargui.doc",
-          "when": "view == cargoTargets",
+          "when": "view == cargoTargets && !isWeb",
           "group": "navigation@9"
         },
         {
           "command": "cargui.update",
-          "when": "view == cargoTargets",
+          "when": "view == cargoTargets && !isWeb",
           "group": "navigation@10"
         },
         {
           "command": "cargui.formatCargoToml",
-          "when": "view == cargoTargets",
+          "when": "view == cargoTargets && !isWeb",
           "group": "navigation@11"
         },
         {
           "command": "cargui.showKeybindings",
-          "when": "view == cargoTargets",
+          "when": "view == cargoTargets && !isWeb",
           "group": "settings@1"
         }
       ],
@@ -799,47 +844,12 @@
         {
           "command": "cargui.newGlobal",
           "group": "navigation"
-        },
-        {
-          "command": "cargui.runTarget",
-          "when": "resourceExtname == .rs",
-          "group": "cargo@1"
-        },
-        {
-          "command": "cargui.buildTarget",
-          "when": "resourceExtname == .rs",
-          "group": "cargo@2"
         }
       ],
       "view/item/context": [
         {
-          "command": "cargui.runTarget",
-          "when": "view == cargoTargets && viewItem == target",
-          "group": "cargo@1"
-        },
-        {
-          "command": "cargui.buildTarget",
-          "when": "view == cargoTargets && viewItem == target",
-          "group": "cargo@2"
-        },
-        {
           "command": "cargui.viewInCargoToml",
           "when": "view == cargoTargets && viewItem == target",
-          "group": "navigation@1"
-        },
-        {
-          "command": "cargui.viewBinaryTarget",
-          "when": "view == cargoTargets && viewItem == target",
-          "group": "navigation@2"
-        },
-        {
-          "command": "cargui.viewMainTargetFromModules",
-          "when": "view == cargoTargets && viewItem == modulesCategorySingle",
-          "group": "navigation@1"
-        },
-        {
-          "command": "cargui.viewMainTargetFromMember",
-          "when": "view == cargoTargets && viewItem == workspaceMemberFolder",
           "group": "navigation@1"
         },
         {
@@ -858,6 +868,11 @@
           "group": "inline@2"
         },
         {
+          "command": "cargui.declareAllUndeclaredFeatures",
+          "when": "view == cargoTargets && viewItem == featuresCategory",
+          "group": "inline@3"
+        },
+        {
           "command": "cargui.toggleAllTargets",
           "when": "view == cargoTargets && viewItem == targetsCategory",
           "group": "inline@1"
@@ -868,13 +883,18 @@
           "group": "inline@2"
         },
         {
+          "command": "cargui.registerAllUnknownTargets",
+          "when": "view == cargoTargets && viewItem == unknownsFolder",
+          "group": "inline@1"
+        },
+        {
           "command": "cargui.toggleAllWorkspaceMembers",
           "when": "view == cargoTargets && viewItem == workspaceCategory",
           "group": "inline"
         },
         {
           "command": "cargui.viewMemberCargoToml",
-          "when": "view == cargoTargets && viewItem == workspaceMember",
+          "when": "view == cargoTargets && viewItem == workspaceMember && resourceScheme == cargui-workspace-deps",
           "group": "navigation@1"
         },
         {
@@ -1103,6 +1123,31 @@
           "group": "1_view@1"
         },
         {
+          "command": "cargui.viewFeatureInCargoToml",
+          "when": "view == cargoTargets && viewItem == undeclaredFeature",
+          "group": "1_view@1"
+        },
+        {
+          "command": "cargui.declareFeature",
+          "when": "view == cargoTargets && viewItem == undeclaredFeature",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.declareFeature",
+          "when": "view == cargoTargets && viewItem == undeclaredFeature",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "cargui.declareAllUndeclaredFeatures",
+          "when": "view == cargoTargets && viewItem == featuresCategory && resourceScheme == cargui-features-category",
+          "group": "inline@3"
+        },
+        {
+          "command": "cargui.declareAllUndeclaredFeatures",
+          "when": "view == cargoTargets && viewItem == featuresCategory",
+          "group": "1_actions@3"
+        },
+        {
           "command": "cargui.removeFeature",
           "when": "view == cargoTargets && viewItem == feature",
           "group": "inline"
@@ -1141,6 +1186,56 @@
           "command": "cargui.removeArgument",
           "when": "view == cargoTargets && viewItem == argument",
           "group": "inline"
+        },
+        {
+          "command": "cargui.viewInMainTarget",
+          "when": "view == cargoTargets && viewItem == module",
+          "group": "1_view@1"
+        },
+        {
+          "command": "cargui.viewDocumentation",
+          "when": "view == cargoTargets && viewItem == module",
+          "group": "1_view@2"
+        },
+        {
+          "command": "cargui.viewInMainTarget",
+          "when": "view == cargoTargets && viewItem == workspaceCategory",
+          "group": "1_view@1"
+        },
+        {
+          "command": "cargui.viewDocumentation",
+          "when": "view == cargoTargets && viewItem == workspaceCategory",
+          "group": "1_view@2"
+        },
+        {
+          "command": "cargui.viewMemberMainTarget",
+          "when": "view == cargoTargets && viewItem == workspaceMember",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cargui.viewMemberDocs",
+          "when": "view == cargoTargets && viewItem == workspaceMember",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cargui.viewMemberCargoToml",
+          "when": "view == cargoTargets && viewItem == workspaceMember",
+          "group": "navigation@3"
+        },
+        {
+          "command": "cargui.viewInMainTarget",
+          "when": "view == cargoTargets && viewItem == projectHeader && cargui.hasMemberSelected",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cargui.viewDocumentation",
+          "when": "view == cargoTargets && viewItem == projectHeader && cargui.hasMemberSelected",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cargui.openProjectCargoToml",
+          "when": "view == cargoTargets && viewItem == projectHeader && cargui.hasMemberSelected",
+          "group": "navigation@3"
         }
       ]
     },

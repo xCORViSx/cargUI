@@ -159,10 +159,11 @@ export function runCargoTarget(
         command += ` --features ${allFeatures.join(',')}`;
     }
 
-    // Add checked arguments
+    // Add checked arguments (prefix each with -- and no space between -- and arg)
     const checkedArgs = cargoTreeProvider.getCheckedArguments();
     if (checkedArgs.length > 0) {
-        command += ` -- ${checkedArgs.join(' ')}`;
+        const formattedArgs = checkedArgs.map(arg => `--${arg}`).join(' ');
+        command += ` -- ${formattedArgs}`;
     }
 
     // Prepend checked environment variables to command
@@ -402,12 +403,24 @@ export async function runCargoCommandOnTargets(
     const checkedFeatures = treeProvider.getCheckedFeatures();
     const allTargets = discoverCargoTargets(workspaceFolder.uri.fsPath, memberPath);
     
-    // If no targets are checked, use main target (first binary)
+    // If no targets are checked, use main target (first binary or library)
     let targetsToRun: string[] = [];
     if (checkedTargets.length === 0) {
-        const mainTarget = allTargets.find(t => t.type === 'bin');
+        // Try to find a binary first (src/main.rs or any binary)
+        let mainTarget = allTargets.find(t => t.type === 'bin' && t.path === 'src/main.rs');
+        if (!mainTarget) {
+            mainTarget = allTargets.find(t => t.type === 'bin');
+        }
+        // If no binary, fall back to library
+        if (!mainTarget) {
+            mainTarget = allTargets.find(t => t.type === 'lib');
+        }
         if (mainTarget) {
             targetsToRun = [mainTarget.name];
+        } else {
+            // No targets found at all
+            vscode.window.showErrorMessage('No targets found to run');
+            return;
         }
     } else {
         targetsToRun = checkedTargets;
@@ -427,10 +440,14 @@ export async function runCargoCommandOnTargets(
         
         // Add target-specific flags
         if (target.type === 'bin') {
-            // Skip --bin for src/main.rs (default binary)
-            if (target.path !== 'src/main.rs') {
+            // Skip --bin for src/main.rs ONLY if no --package flag is present
+            // When --package is used, cargo needs explicit --bin even for main.rs
+            if (target.path !== 'src/main.rs' || selectedWorkspaceMember) {
                 command += ` --bin ${targetName}`;
             }
+        } else if (target.type === 'lib') {
+            // Add --lib flag for library targets
+            command += ` --lib`;
         } else if (target.type === 'example') {
             command += ` --example ${targetName}`;
         } else if (target.type === 'test') {

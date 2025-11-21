@@ -13,6 +13,12 @@ export class DependencyDecorationProvider implements vscode.FileDecorationProvid
     private targetColors = new Map<string, string>(); // Map target/rustup name to color
     
     provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
+        if (uri.scheme === 'cargui-workspace-deps') {
+            return {
+                color: new vscode.ThemeColor('charts.orange'),
+                tooltip: 'Workspace Dependencies'
+            };
+        }
         if (uri.scheme === 'cargui-dep' && this.inheritedDependencies.has(uri.path)) {
             return {
                 color: new vscode.ThemeColor('charts.yellow'),
@@ -25,7 +31,19 @@ export class DependencyDecorationProvider implements vscode.FileDecorationProvid
                 tooltip: 'At latest version'
             };
         }
-        if (uri.scheme === 'cargui-target' || uri.scheme === 'cargui-rustup' || uri.scheme === 'cargui-module') {
+        if (uri.scheme === 'cargui-workspace-category') {
+            return {
+                color: new vscode.ThemeColor('charts.orange'),
+                tooltip: 'Workspace Members'
+            };
+        }
+        if (uri.scheme === 'cargui-workspace-member-header') {
+            return {
+                color: new vscode.ThemeColor('charts.orange'),
+                tooltip: 'Selected Workspace Member'
+            };
+        }
+        if (uri.scheme === 'cargui-target' || uri.scheme === 'cargui-rustup' || uri.scheme === 'cargui-module' || uri.scheme === 'cargui-feature') {
             const color = this.targetColors.get(uri.path);
             if (color) {
                 return {

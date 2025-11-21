@@ -103,11 +103,15 @@
     "cargui.snapshots": [
         {
             "name": "lib",
-            "mode": "debug",
+            "mode": "release",
             "targets": [],
             "features": [],
-            "arguments": [],
-            "envVars": []
+            "arguments": [
+                "--verbose"
+            ],
+            "envVars": [],
+            "checkedWorkspaceMembers": []
         }
-    ]
+    ],
+    "cargui.activeSnapshot": "lib"
 }

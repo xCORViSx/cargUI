@@ -65,21 +65,8 @@ export function detectUnregisteredTargets(workspacePath: string, memberPath?: st
             }
         }
 
-        const examplesDir = path.join(basePath, 'examples');
-        if (fs.existsSync(examplesDir)) {
-            const items = fs.readdirSync(examplesDir, { withFileTypes: true });
-            for (const item of items) {
-                if (item.isFile() && item.name.endsWith('.rs')) {
-                    registeredPaths.add(`examples/${item.name}`);
-                } else if (item.isDirectory()) {
-                    // Check for main.rs in subdirectory (e.g., examples/browser/main.rs)
-                    const mainPath = path.join(examplesDir, item.name, 'main.rs');
-                    if (fs.existsSync(mainPath)) {
-                        registeredPaths.add(`examples/${item.name}/main.rs`);
-                    }
-                }
-            }
-        }
+        // Note: We intentionally don't auto-register all files in examples/
+        // Only explicitly declared examples in [[example]] sections are registered
 
         if (manifest.test && Array.isArray(manifest.test)) {
             for (const test of manifest.test) {
@@ -98,21 +85,8 @@ export function detectUnregisteredTargets(workspacePath: string, memberPath?: st
             }
         }
 
-        const testsDir = path.join(basePath, 'tests');
-        if (fs.existsSync(testsDir)) {
-            const items = fs.readdirSync(testsDir, { withFileTypes: true });
-            for (const item of items) {
-                if (item.isFile() && item.name.endsWith('.rs')) {
-                    registeredPaths.add(`tests/${item.name}`);
-                } else if (item.isDirectory()) {
-                    // Check for main.rs in subdirectory (e.g., tests/integration/main.rs)
-                    const mainPath = path.join(testsDir, item.name, 'main.rs');
-                    if (fs.existsSync(mainPath)) {
-                        registeredPaths.add(`tests/${item.name}/main.rs`);
-                    }
-                }
-            }
-        }
+        // Note: We intentionally don't auto-register all files in tests/
+        // Only explicitly declared tests in [[test]] sections are registered
 
         if (manifest.bench && Array.isArray(manifest.bench)) {
             for (const bench of manifest.bench) {
@@ -131,21 +105,8 @@ export function detectUnregisteredTargets(workspacePath: string, memberPath?: st
             }
         }
 
-        const benchesDir = path.join(basePath, 'benches');
-        if (fs.existsSync(benchesDir)) {
-            const items = fs.readdirSync(benchesDir, { withFileTypes: true });
-            for (const item of items) {
-                if (item.isFile() && item.name.endsWith('.rs')) {
-                    registeredPaths.add(`benches/${item.name}`);
-                } else if (item.isDirectory()) {
-                    // Check for main.rs in subdirectory (e.g., benches/benchmark/main.rs)
-                    const mainPath = path.join(benchesDir, item.name, 'main.rs');
-                    if (fs.existsSync(mainPath)) {
-                        registeredPaths.add(`benches/${item.name}/main.rs`);
-                    }
-                }
-            }
-        }
+        // Note: We intentionally don't auto-register all files in benches/
+        // Only explicitly declared benchmarks in [[bench]] sections are registered
 
         function scanSrcDirectory(dirPath: string, relativePath: string = 'src') {
             if (!fs.existsSync(dirPath)) return;
@@ -175,6 +136,99 @@ export function detectUnregisteredTargets(workspacePath: string, memberPath?: st
 
         const srcDir = path.join(basePath, 'src');
         scanSrcDirectory(srcDir);
+
+        // Scan examples/ directory for undeclared examples
+        const examplesDir = path.join(basePath, 'examples');
+        if (fs.existsSync(examplesDir)) {
+            const items = fs.readdirSync(examplesDir, { withFileTypes: true });
+            for (const item of items) {
+                if (item.isFile() && item.name.endsWith('.rs')) {
+                    const relPath = `examples/${item.name}`;
+                    if (!registeredPaths.has(relPath)) {
+                        const fileName = item.name.replace('.rs', '').replace(/_/g, '-');
+                        unregistered.push({
+                            name: fileName,
+                            type: 'example',
+                            path: relPath,
+                            memberName: manifest.package?.name
+                        });
+                    }
+                } else if (item.isDirectory()) {
+                    const mainPath = path.join(examplesDir, item.name, 'main.rs');
+                    const relPath = `examples/${item.name}/main.rs`;
+                    if (fs.existsSync(mainPath) && !registeredPaths.has(relPath)) {
+                        unregistered.push({
+                            name: item.name,
+                            type: 'example',
+                            path: relPath,
+                            memberName: manifest.package?.name
+                        });
+                    }
+                }
+            }
+        }
+
+        // Scan tests/ directory for undeclared tests
+        const testsDir = path.join(basePath, 'tests');
+        if (fs.existsSync(testsDir)) {
+            const items = fs.readdirSync(testsDir, { withFileTypes: true });
+            for (const item of items) {
+                if (item.isFile() && item.name.endsWith('.rs')) {
+                    const relPath = `tests/${item.name}`;
+                    if (!registeredPaths.has(relPath)) {
+                        const fileName = item.name.replace('.rs', '').replace(/_/g, '-');
+                        unregistered.push({
+                            name: fileName,
+                            type: 'test',
+                            path: relPath,
+                            memberName: manifest.package?.name
+                        });
+                    }
+                } else if (item.isDirectory()) {
+                    const mainPath = path.join(testsDir, item.name, 'main.rs');
+                    const relPath = `tests/${item.name}/main.rs`;
+                    if (fs.existsSync(mainPath) && !registeredPaths.has(relPath)) {
+                        unregistered.push({
+                            name: item.name,
+                            type: 'test',
+                            path: relPath,
+                            memberName: manifest.package?.name
+                        });
+                    }
+                }
+            }
+        }
+
+        // Scan benches/ directory for undeclared benchmarks
+        const benchesDir = path.join(basePath, 'benches');
+        if (fs.existsSync(benchesDir)) {
+            const items = fs.readdirSync(benchesDir, { withFileTypes: true });
+            for (const item of items) {
+                if (item.isFile() && item.name.endsWith('.rs')) {
+                    const relPath = `benches/${item.name}`;
+                    if (!registeredPaths.has(relPath)) {
+                        const fileName = item.name.replace('.rs', '').replace(/_/g, '-');
+                        unregistered.push({
+                            name: fileName,
+                            type: 'bench',
+                            path: relPath,
+                            memberName: manifest.package?.name
+                        });
+                    }
+                } else if (item.isDirectory()) {
+                    const mainPath = path.join(benchesDir, item.name, 'main.rs');
+                    const relPath = `benches/${item.name}/main.rs`;
+                    if (fs.existsSync(mainPath) && !registeredPaths.has(relPath)) {
+                        unregistered.push({
+                            name: item.name,
+                            type: 'bench',
+                            path: relPath,
+                            memberName: manifest.package?.name
+                        });
+                    }
+                }
+            }
+        }
 
         const referencedFiles = findReferencedModules(basePath);
         const moduleFiles = getAllModuleFiles(basePath);
@@ -332,7 +386,9 @@ export function detectUndeclaredFeatures(workspacePath: string, memberPath?: str
         }
 
         const usedFeatures = new Set<string>();
-        const featureRegex = /cfg\s*\(\s*feature\s*=\s*["']([^"']+)["']\s*\)/g;
+        // we match feature flags in various forms by looking for the pattern feature = "..."
+        // this catches cfg(feature = "..."), all(feature = "..."), any(feature = "..."), etc.
+        const featureRegex = /feature\s*=\s*["']([^"']+)["']/g;
 
         function scanDirectory(dirPath: string) {
             if (!fs.existsSync(dirPath)) return;
@@ -342,12 +398,15 @@ export function detectUndeclaredFeatures(workspacePath: string, memberPath?: str
                 const fullPath = path.join(dirPath, item.name);
 
                 if (item.isDirectory()) {
-                    if (item.name !== 'target') {
+                    // Skip target, node_modules, and any workspace member subdirectories (like crates/)
+                    if (item.name !== 'target' && item.name !== 'node_modules' && item.name !== 'crates') {
                         scanDirectory(fullPath);
                     }
                 } else if (item.name.endsWith('.rs')) {
                     try {
                         const content = fs.readFileSync(fullPath, 'utf-8');
+                        // we reset the regex state before each file since /g maintains state between exec() calls
+                        featureRegex.lastIndex = 0;
                         let match;
                         while ((match = featureRegex.exec(content)) !== null) {
                             usedFeatures.add(match[1]);
@@ -359,6 +418,7 @@ export function detectUndeclaredFeatures(workspacePath: string, memberPath?: str
             }
         }
 
+        // Only scan this member's code directories, not other workspace members
         scanDirectory(path.join(basePath, 'src'));
         scanDirectory(path.join(basePath, 'tests'));
         scanDirectory(path.join(basePath, 'benches'));

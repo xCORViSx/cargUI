@@ -1,3 +1,4 @@
+// I coordinate cargUI command registration so the extension can expose cargo workflows in VS Code.
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -25,6 +26,7 @@ import {
 	updateDependencyVersions,
 	removeDuplicateDependencies
 } from './cargoToml';
+import { detectUndeclaredFeatures } from './smartDetection';
 import {
 	fetchCrateMetadata,
 	fetchCrateVersions,
@@ -134,94 +136,53 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		return disposable;
 	};
 
-	const showCargoQuickPick = async () => {
-		const activeWorkspace = vscode.workspace.workspaceFolders?.[0];
-		if (!activeWorkspace) {
-			vscode.window.showErrorMessage('No workspace folder found');
+	// Helper function to auto-format Cargo.toml after edits with undo option
+	const autoFormatCargoToml = async (cargoTomlPath: string, memberName?: string, actionDescription: string = 'Cargo.toml modified') => {
+		const config = vscode.workspace.getConfiguration('cargui');
+		const autoFormat = config.get<boolean>('autoFormatCargoToml', true);
+		
+		if (!autoFormat) {
 			return;
 		}
 
-		interface CargoQuickPickItem extends vscode.QuickPickItem {
-			action: string;
-			isTarget?: boolean;
-			target?: CargoTarget;
-		}
-
-		const items: CargoQuickPickItem[] = [];
-		const modeLabel = state.isReleaseMode ? '$(rocket) Release' : '$(bug) Debug';
-
-		items.push({
-			label: `$(gear) Toggle Mode (Current: ${state.isReleaseMode ? 'Release' : 'Debug'})`,
-			description: 'Switch between Debug and Release builds',
-			action: 'toggleMode'
-		});
-
-		items.push({ label: '', kind: vscode.QuickPickItemKind.Separator, action: '' } as CargoQuickPickItem);
-
-		const mainCommands: Array<{ label: string; description: string; action: string }> = [
-			{ label: `$(tools) Build ${modeLabel}`, description: 'Compile the current package', action: 'build' },
-			{ label: `$(play) Run ${modeLabel}`, description: 'Run the main binary', action: 'run' },
-			{ label: `$(beaker) Test`, description: 'Run tests', action: 'test' },
-			{ label: `$(check) Check`, description: 'Check without building', action: 'check' },
-			{ label: `$(clippy) Clippy`, description: 'Run Clippy linter', action: 'clippy' },
-			{ label: `$(paintcan) Format`, description: 'Format code with rustfmt', action: 'fmt' },
-			{ label: `$(trash) Clean`, description: 'Remove build artifacts', action: 'clean' },
-			{ label: `$(book) Doc`, description: 'Build documentation', action: 'doc' }
-		];
-
-		mainCommands.forEach(cmd => items.push({ label: cmd.label, description: cmd.description, action: cmd.action }));
-
-		const targets = discoverCargoTargets(activeWorkspace.uri.fsPath);
-		if (targets.length > 0) {
-			items.push({ label: '', kind: vscode.QuickPickItemKind.Separator, action: '' } as CargoQuickPickItem);
-
-			const appendTargets = (targetsOfType: CargoTarget[], header: string, icon: string) => {
-				if (targetsOfType.length === 0) {
-					return;
+		// Read content before formatting for undo
+		const beforeContent = fs.readFileSync(cargoTomlPath, 'utf-8');
+		
+		// Format the file
+		const success = await formatCargoTomlFile(cargoTomlPath, memberName);
+		
+		if (success) {
+			// Show notification with Undo and Disable buttons
+			const action = await vscode.window.showInformationMessage(
+				`${actionDescription} - Cargo.toml formatted`,
+			'Undo',
+			'Disable Auto-Formatting'
+		);
+		
+		if (action === 'Undo') {
+			// Restore original content
+			fs.writeFileSync(cargoTomlPath, beforeContent, 'utf-8');
+			vscode.window.showInformationMessage('Cargo.toml formatting undone');
+		} else if (action === 'Disable Auto-Formatting') {
+			await config.update('autoFormatCargoToml', false, vscode.ConfigurationTarget.Global);
+			const reEnableChoice = await vscode.window.showInformationMessage(
+				'Auto-formatting disabled.',
+				'Re-enable'
+			);
+			if (reEnableChoice === 'Re-enable') {
+				await config.update('autoFormatCargoToml', true, vscode.ConfigurationTarget.Global);
+				const disableChoice = await vscode.window.showInformationMessage(
+					'Auto-formatting re-enabled.',
+					'Disable'
+				);
+				if (disableChoice === 'Disable') {
+					await config.update('autoFormatCargoToml', false, vscode.ConfigurationTarget.Global);
+					vscode.window.showInformationMessage('Auto-formatting disabled.');
 				}
-				items.push({ label: header, kind: vscode.QuickPickItemKind.Separator, action: '' } as CargoQuickPickItem);
-				targetsOfType.forEach(target => {
-					items.push({
-						label: `${icon} ${target.name}`,
-						description: target.path,
-						action: 'runTarget',
-						isTarget: true,
-						target
-					});
-				});
-			};
-
-			appendTargets(targets.filter(t => t.type === 'bin'), 'Binaries', '$(file-binary)');
-			appendTargets(targets.filter(t => t.type === 'example'), 'Examples', '$(note)');
-			appendTargets(targets.filter(t => t.type === 'test'), 'Tests', '$(beaker)');
-			appendTargets(targets.filter(t => t.type === 'bench'), 'Benchmarks', '$(dashboard)');
+			}
 		}
-
-		const selection = await vscode.window.showQuickPick(items, {
-			placeHolder: 'Select a Cargo command or target',
-			matchOnDescription: true
-		});
-
-		if (!selection) {
-			return;
-		}
-
-		if (selection.action === 'toggleMode') {
-			vscode.commands.executeCommand('cargui.toggleRelease');
-			return;
-		}
-
-		if (selection.isTarget && selection.target) {
-			runCargoTarget(selection.target.name, selection.target.type, state.isReleaseMode, cargoTreeProvider);
-			return;
-		}
-
-		if (selection.action) {
-			runCargoCommand(selection.action, state.isReleaseMode);
-		}
-	};
-
-	const addDependencyWithName = async (
+	}
+};	const addDependencyWithName = async (
 		initialCrateName?: string,
 		dependencyType?: 'production' | 'dev' | 'build' | 'workspace'
 	) => {
@@ -527,31 +488,33 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			const featureMsg = selectedFeatures.length > 0 ? ` with features [${selectedFeatures.join(', ')}]` : '';
 			vscode.window.showInformationMessage(`Added ${crateName} ${selectedVersion}${featureMsg} to ${dependencySection}`);
 			cargoTreeProvider.refresh();
+			await autoFormatCargoToml(targetCargoToml, undefined, `Added dependency ${crateName} ${selectedVersion}`);
 		} catch (error) {
 			vscode.window.showErrorMessage(`Failed to add dependency: ${error}`);
 		}
 	};
 
-	// Quick access command palette entry
-	register('cargui.open', () => {
-		showCargoQuickPick();
-	});
-
 	// Direct cargo commands
 	register('cargui.build', () => {
-		runCargoCommandOnTargets('build', state.isReleaseMode, cargoTreeProvider);
+		runCargoCommandOnTargets('build', state.isReleaseMode, cargoTreeProvider, cargoTreeProvider.getSelectedWorkspaceMember());
 	});
 
 	register('cargui.run', () => {
-		runCargoCommandOnTargets('run', state.isReleaseMode, cargoTreeProvider);
+		runCargoCommandOnTargets('run', state.isReleaseMode, cargoTreeProvider, cargoTreeProvider.getSelectedWorkspaceMember());
 	});
 
 	register('cargui.test', () => {
-		runCargoCommandOnTargets('test', state.isReleaseMode, cargoTreeProvider);
+		runCargoCommandOnTargets('test', state.isReleaseMode, cargoTreeProvider, cargoTreeProvider.getSelectedWorkspaceMember());
+	});
+
+	// I add a bench command so you can run the full benchmark suite without diving into the tree.
+	register('cargui.bench', () => {
+		// I call the simple cargo bench runner so it executes every benchmark target by default.
+		runCargoCommand('bench', state.isReleaseMode);
 	});
 
 	register('cargui.check', () => {
-		runCargoCommandOnTargets('check', state.isReleaseMode, cargoTreeProvider);
+		runCargoCommandOnTargets('check', state.isReleaseMode, cargoTreeProvider, cargoTreeProvider.getSelectedWorkspaceMember());
 	});
 
 	register('cargui.clean', () => {
@@ -789,7 +752,11 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		if (!workspaceFolder) {
 			return;
 		}
-		const features = discoverCargoFeatures(workspaceFolder.uri.fsPath);
+		const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+		const memberPath = state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all'
+			? members.find(m => m.name === state.selectedWorkspaceMember)?.path
+			: undefined;
+		const features = discoverCargoFeatures(workspaceFolder.uri.fsPath, memberPath);
 		const checkedFeatures = cargoTreeProvider.getCheckedFeatures();
 		const shouldCheckAll = checkedFeatures.length < features.length;
 		features.forEach(feature => cargoTreeProvider.setFeatureChecked(feature, shouldCheckAll));
@@ -904,19 +871,17 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
 		// If clicking the same member that's already selected, deselect it
 		if (state.selectedWorkspaceMember === memberName) {
-			state.selectedWorkspaceMember = undefined;
+			deps.setSelectedWorkspaceMember(undefined);
 			vscode.window.showInformationMessage(`Deselected workspace member: ${memberName}`);
 		} else {
 			// Otherwise select the new member
 			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
 			const member = members.find(m => m.name === memberName);
 			if (member) {
-				state.selectedWorkspaceMember = memberName;
+				deps.setSelectedWorkspaceMember(memberName);
 				vscode.window.showInformationMessage(`Selected workspace member: ${memberName}`);
 			}
 		}
-
-		cargoTreeProvider.refresh();
 	});
 
 	register('cargui.buildTarget', (target: CargoTreeItem) => {
@@ -941,7 +906,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
 			const member = members.find(m => m.name === target.workspaceMember);
 			if (member) {
-				cargoTomlUri = vscode.Uri.file(path.join(member.path, 'Cargo.toml'));
+				cargoTomlUri = vscode.Uri.file(path.join(workspaceFolder.uri.fsPath, member.path, 'Cargo.toml'));
 			} else {
 				cargoTomlUri = vscode.Uri.joinPath(workspaceFolder.uri, 'Cargo.toml');
 			}
@@ -996,82 +961,6 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		const fullPath = vscode.Uri.file(filePath);
 		try {
 			const doc = await vscode.workspace.openTextDocument(fullPath);
-			await vscode.window.showTextDocument(doc);
-		} catch (error) {
-			vscode.window.showErrorMessage(`Failed to open ${filePath}: ${error}`);
-		}
-	});
-
-	register('cargui.viewMainTargetFromModules', async (modulesItem: CargoTreeItem) => {
-		if (!modulesItem || !modulesItem.workspaceMember || !workspaceFolder) {
-			return;
-		}
-
-		// Get the selected member
-		const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
-		const member = members.find(m => m.name === modulesItem.workspaceMember);
-		
-		if (!member) {
-			vscode.window.showErrorMessage(`Workspace member "${modulesItem.workspaceMember}" not found`);
-			return;
-		}
-
-		// Try to open main.rs first, then lib.rs
-		let filePath: string;
-		const basePath = path.join(workspaceFolder.uri.fsPath, member.path);
-		
-		const mainRsPath = path.join(basePath, 'src/main.rs');
-		const libRsPath = path.join(basePath, 'src/lib.rs');
-		
-		if (fs.existsSync(mainRsPath)) {
-			filePath = mainRsPath;
-		} else if (fs.existsSync(libRsPath)) {
-			filePath = libRsPath;
-		} else {
-			vscode.window.showErrorMessage(`No main.rs or lib.rs found in ${member.name}`);
-			return;
-		}
-
-		try {
-			const doc = await vscode.workspace.openTextDocument(filePath);
-			await vscode.window.showTextDocument(doc);
-		} catch (error) {
-			vscode.window.showErrorMessage(`Failed to open ${filePath}: ${error}`);
-		}
-	});
-
-	register('cargui.viewMainTargetFromMember', async (memberItem: CargoTreeItem) => {
-		if (!memberItem || !memberItem.workspaceMember || !workspaceFolder) {
-			return;
-		}
-
-		// Get the member info
-		const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
-		const member = members.find(m => m.name === memberItem.workspaceMember);
-		
-		if (!member) {
-			vscode.window.showErrorMessage(`Workspace member "${memberItem.workspaceMember}" not found`);
-			return;
-		}
-
-		// Try to open main.rs first, then lib.rs
-		let filePath: string;
-		const basePath = path.join(workspaceFolder.uri.fsPath, member.path);
-		
-		const mainRsPath = path.join(basePath, 'src/main.rs');
-		const libRsPath = path.join(basePath, 'src/lib.rs');
-		
-		if (fs.existsSync(mainRsPath)) {
-			filePath = mainRsPath;
-		} else if (fs.existsSync(libRsPath)) {
-			filePath = libRsPath;
-		} else {
-			vscode.window.showErrorMessage(`No main.rs or lib.rs found in ${member.name}`);
-			return;
-		}
-
-		try {
-			const doc = await vscode.workspace.openTextDocument(filePath);
 			await vscode.window.showTextDocument(doc);
 		} catch (error) {
 			vscode.window.showErrorMessage(`Failed to open ${filePath}: ${error}`);
@@ -1167,22 +1056,25 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 
 		const input = await vscode.window.showInputBox({
-			prompt: 'Enter argument',
-			placeHolder: '--verbose, --target x86_64-unknown-linux-gnu, etc.'
+			prompt: 'Enter argument (without -- prefix)',
+			placeHolder: 'verbose, target x86_64-unknown-linux-gnu, etc.'
 		});
 
 		if (input && input.trim()) {
+			// Normalize: remove leading -- and any spaces
+			const normalized = input.trim().replace(/^--\s*/, '');
+			
 			if (targetCategoryName === undefined) {
 				// Add to top-level uncategorized arguments
 				const strays = config.get<string[]>('arguments') || [];
-				if (strays.includes(input.trim())) {
-					vscode.window.showWarningMessage(`Argument '${input.trim()}' already exists`);
+				if (strays.includes(normalized)) {
+					vscode.window.showWarningMessage(`Argument '${normalized}' already exists`);
 					return;
 				}
-				strays.push(input.trim());
+				strays.push(normalized);
 				await config.update('arguments', strays, vscode.ConfigurationTarget.Workspace);
 				cargoTreeProvider.refresh();
-				vscode.window.showInformationMessage(`Added uncategorized argument: ${input.trim()}`);
+				vscode.window.showInformationMessage(`Added uncategorized argument: ${normalized}`);
 			} else {
 				const category = argCategories.find(cat => cat.name === targetCategoryName);
 				if (!category) {
@@ -1190,15 +1082,15 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 					return;
 				}
 
-				if (category.arguments.includes(input.trim())) {
-					vscode.window.showWarningMessage(`Argument '${input.trim()}' already exists in ${targetCategoryName}`);
+				if (category.arguments.includes(normalized)) {
+					vscode.window.showWarningMessage(`Argument '${normalized}' already exists in ${targetCategoryName}`);
 					return;
 				}
 
-				category.arguments.push(input.trim());
+				category.arguments.push(normalized);
 				await config.update('argumentCategories', argCategories, vscode.ConfigurationTarget.Workspace);
 				cargoTreeProvider.refresh();
-				vscode.window.showInformationMessage(`Added argument '${input.trim()}' to ${targetCategoryName}`);
+				vscode.window.showInformationMessage(`Added argument '${normalized}' to ${targetCategoryName}`);
 			}
 		}
 	});
@@ -1209,12 +1101,15 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 
 		const input = await vscode.window.showInputBox({
-			prompt: 'Edit argument',
-			placeHolder: '--verbose, --debug, --port 8080, etc.',
+			prompt: 'Edit argument (without -- prefix)',
+			placeHolder: 'verbose, debug, port 8080, etc.',
 			value: item.argument
 		});
 
 		if (input && input.trim()) {
+			// Normalize: remove leading -- and any spaces
+			const normalized = input.trim().replace(/^--\s*/, '');
+			
 			const config = vscode.workspace.getConfiguration('cargui');
 			let found = false;
 
@@ -1222,16 +1117,16 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			const strays = config.get<string[]>('arguments') || [];
 			const argCategories = config.get<ArgumentCategory[]>('argumentCategories') || [];
 			
-			if (input.trim() !== item.argument) {
+			if (normalized !== item.argument) {
 				// Check duplicates in uncategorized
-				if (strays.includes(input.trim())) {
-					vscode.window.showWarningMessage(`Argument '${input.trim()}' already exists at top level`);
+				if (strays.includes(normalized)) {
+					vscode.window.showWarningMessage(`Argument '${normalized}' already exists at top level`);
 					return;
 				}
 				// Check duplicates in categories
 				for (const category of argCategories) {
-					if (category.arguments.includes(input.trim())) {
-						vscode.window.showWarningMessage(`Argument '${input.trim()}' already exists in ${category.name}`);
+					if (category.arguments.includes(normalized)) {
+						vscode.window.showWarningMessage(`Argument '${normalized}' already exists in ${category.name}`);
 						return;
 					}
 				}
@@ -1240,7 +1135,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			// Try to update in uncategorized first
 			const strayIndex = strays.indexOf(item.argument);
 			if (strayIndex !== -1) {
-				strays[strayIndex] = input.trim();
+				strays[strayIndex] = normalized;
 				await config.update('arguments', strays, vscode.ConfigurationTarget.Workspace);
 				found = true;
 			} else {
@@ -1248,7 +1143,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 				for (const category of argCategories) {
 					const index = category.arguments.indexOf(item.argument);
 					if (index !== -1) {
-						category.arguments[index] = input.trim();
+						category.arguments[index] = normalized;
 						await config.update('argumentCategories', argCategories, vscode.ConfigurationTarget.Workspace);
 						found = true;
 						break;
@@ -1257,9 +1152,9 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			}
 
 			if (found) {
-				cargoTreeProvider.renameCheckedArgument(item.argument, input.trim());
+				cargoTreeProvider.renameCheckedArgument(item.argument, normalized);
 				cargoTreeProvider.refresh();
-				vscode.window.showInformationMessage(`Updated argument: ${item.argument} → ${input.trim()}`);
+				vscode.window.showInformationMessage(`Updated argument: ${item.argument} → ${normalized}`);
 			} else {
 				vscode.window.showWarningMessage(`Argument "${item.argument}" not found`);
 			}
@@ -2146,14 +2041,15 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			updatedSnapshot = { ...snapshot, name: newName.trim() };
 		}
 
-		if (JSON.stringify(snapshot) === JSON.stringify(updatedSnapshot)) {
-			return;
-		}
+	if (JSON.stringify(snapshot) === JSON.stringify(updatedSnapshot)) {
+		vscode.window.showInformationMessage('No changes to snapshot');
+		return;
+	}
 
-		const updatedSnapshots = snapshots.map(p => (p.name === item.snapshot ? updatedSnapshot : p));
-		await config.update('snapshots', updatedSnapshots, vscode.ConfigurationTarget.Workspace);
-
-		const activeSnapshot = config.get<string>('activeSnapshot');
+	// Remove old snapshot and add updated one to prevent duplicates
+	const updatedSnapshots = snapshots.filter(p => p.name !== item.snapshot);
+	updatedSnapshots.push(updatedSnapshot);
+	await config.update('snapshots', updatedSnapshots, vscode.ConfigurationTarget.Workspace);		const activeSnapshot = config.get<string>('activeSnapshot');
 		if (activeSnapshot === item.snapshot && newName.trim() !== item.snapshot) {
 			await config.update('activeSnapshot', newName.trim(), vscode.ConfigurationTarget.Workspace);
 		}
@@ -2199,6 +2095,14 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			cargoTreeProvider.refresh();
 			vscode.window.showInformationMessage(`Deleted snapshot: ${targetItem.snapshot}`);
 		}
+	});
+
+	register('cargui.resetSmartDetectionNotifications', async () => {
+		await context.workspaceState.update('cargui.ignoreUnknownTargets', undefined);
+		await context.workspaceState.update('cargui.ignoreUndeclaredFeatures', undefined);
+		await context.workspaceState.update('cargui.ignoreUndeclaredModules', undefined);
+		vscode.window.showInformationMessage('Smart detection notifications reset - they will show again on next detection');
+		cargoTreeProvider.refresh();
 	});
 
 	register('cargui.toggleWatch', async () => {
@@ -2580,6 +2484,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			await updateDependencyVersions(cargoTomlPath, versionChoices);
 			vscode.window.showInformationMessage(`Updated ${dep.name} to version ${selectedVersion}`);
 			cargoTreeProvider.refresh();
+			await autoFormatCargoToml(cargoTomlPath, undefined, `Updated ${dep.name} to ${selectedVersion}`);
 		} catch (error) {
 			vscode.window.showErrorMessage(`Failed to change version for ${dep.name}: ${error}`);
 		}
@@ -2715,6 +2620,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			fs.writeFileSync(cargoTomlPath, newLines.join('\n'), 'utf-8');
 			vscode.window.showInformationMessage(`Removed dependency: ${dep.name}`);
 			cargoTreeProvider.refresh();
+			await autoFormatCargoToml(cargoTomlPath, undefined, `Removed dependency ${dep.name}`);
 		} catch (error) {
 			vscode.window.showErrorMessage(`Failed to remove dependency: ${error}`);
 		}
@@ -2901,6 +2807,70 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 	});
 
+	register('cargui.viewFeatureUsage', async (featureName: string, memberPath?: string) => {
+		if (!featureName) {
+			return;
+		}
+
+		const workspace = vscode.workspace.workspaceFolders?.[0];
+		if (!workspace) {
+			return;
+		}
+
+		// we scan all .rs files for the feature usage
+		const basePath = memberPath ? path.join(workspace.uri.fsPath, memberPath) : workspace.uri.fsPath;
+		
+		function findFeatureUsage(dirPath: string): { file: string; line: number } | null {
+			if (!fs.existsSync(dirPath)) {
+				return null;
+			}
+
+			const items = fs.readdirSync(dirPath, { withFileTypes: true });
+			for (const item of items) {
+				const fullPath = path.join(dirPath, item.name);
+
+				if (item.isDirectory()) {
+					if (item.name !== 'target' && item.name !== 'node_modules') {
+						const result = findFeatureUsage(fullPath);
+						if (result) return result;
+					}
+				} else if (item.name.endsWith('.rs')) {
+					try {
+						const content = fs.readFileSync(fullPath, 'utf-8');
+						const lines = content.split('\n');
+						// we search for feature = "featureName" in the content
+						for (let i = 0; i < lines.length; i++) {
+							const line = lines[i];
+							// match feature = "..." or feature = '...' with any spacing
+							if (line.includes('feature') && (line.includes(`"${featureName}"`) || line.includes(`'${featureName}'`))) {
+								return { file: fullPath, line: i };
+							}
+						}
+					} catch (err) {
+						// Ignore read errors
+					}
+				}
+			}
+			return null;
+		}
+
+		const usage = findFeatureUsage(basePath);
+		if (!usage) {
+			vscode.window.showWarningMessage(`Feature "${featureName}" not used in code`);
+			return;
+		}
+
+		try {
+			const document = await vscode.workspace.openTextDocument(usage.file);
+			const editor = await vscode.window.showTextDocument(document);
+			const position = new vscode.Position(usage.line, 0);
+			editor.selection = new vscode.Selection(position, position);
+			editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to open file: ${error}`);
+		}
+	});
+
 	register('cargui.removeFeature', async (item: CargoTreeItem) => {
 		if (!item?.feature) {
 			return;
@@ -2984,7 +2954,202 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 	});
 
-	register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
+	register('cargui.declareFeature', async (item: CargoTreeItem, memberPath?: string) => {
+		const featureName = item?.feature;
+		if (!featureName) {
+			return;
+		}
+
+		const workspace = vscode.workspace.workspaceFolders?.[0];
+		if (!workspace) {
+			return;
+		}
+
+		// we determine which Cargo.toml to edit
+		const members = discoverWorkspaceMembers(workspace.uri.fsPath);
+		let cargoTomlPath: string;
+		if (memberPath) {
+			cargoTomlPath = path.join(workspace.uri.fsPath, memberPath, 'Cargo.toml');
+		} else if (state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all') {
+			const member = members.find(m => m.name === state.selectedWorkspaceMember);
+			if (!member) {
+				vscode.window.showErrorMessage('Selected workspace member not found');
+				return;
+			}
+			cargoTomlPath = path.join(workspace.uri.fsPath, member.path, 'Cargo.toml');
+		} else {
+			cargoTomlPath = path.join(workspace.uri.fsPath, 'Cargo.toml');
+		}
+
+		if (!fs.existsSync(cargoTomlPath)) {
+			vscode.window.showErrorMessage(`Cargo.toml not found at ${cargoTomlPath}`);
+			return;
+		}
+
+		try {
+			const content = fs.readFileSync(cargoTomlPath, 'utf-8');
+			const lines = content.split('\n');
+			let featuresLineIndex = -1;
+			let inFeatures = false;
+			let lastFeatureLine = -1;
+
+			// we find the [features] section and check if feature already exists
+			for (let i = 0; i < lines.length; i++) {
+				const trimmed = lines[i].trim();
+
+				if (trimmed === '[features]') {
+					featuresLineIndex = i;
+					inFeatures = true;
+					continue;
+				}
+
+				if (trimmed.startsWith('[')) {
+					inFeatures = false;
+					continue;
+				}
+
+				if (inFeatures) {
+					if (trimmed.startsWith(`${featureName} =`)) {
+						vscode.window.showInformationMessage(`Feature "${featureName}" already declared in Cargo.toml`);
+						return;
+					}
+					if (trimmed.length > 0) {
+						lastFeatureLine = i;
+					}
+				}
+			}
+
+			// we add the feature with an empty array as default
+			const newFeatureLine = `${featureName} = []`;
+
+			if (featuresLineIndex === -1) {
+				// we need to add [features] section
+				lines.push('', '[features]', newFeatureLine);
+			} else {
+				// we insert after the last feature line or right after [features]
+				const insertIndex = lastFeatureLine >= 0 ? lastFeatureLine + 1 : featuresLineIndex + 1;
+				lines.splice(insertIndex, 0, newFeatureLine);
+			}
+
+			fs.writeFileSync(cargoTomlPath, lines.join('\n'), 'utf-8');
+			vscode.window.showInformationMessage(`Declared feature: ${featureName}`);
+			cargoTreeProvider.refresh();
+			await autoFormatCargoToml(cargoTomlPath, undefined, `Declared feature "${featureName}"`);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to declare feature: ${error}`);
+		}
+	});
+
+	register('cargui.declareSelectedFeatures', async (memberPath?: string) => {
+		const workspace = vscode.workspace.workspaceFolders?.[0];
+		if (!workspace) {
+			return;
+		}
+
+		// we get all undeclared features (not just checked ones)
+		const featureMemberPath = memberPath || (state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all'
+			? discoverWorkspaceMembers(workspace.uri.fsPath).find(m => m.name === state.selectedWorkspaceMember)?.path
+			: undefined);
+		
+		const undeclaredFeatures = detectUndeclaredFeatures(workspace.uri.fsPath, featureMemberPath);
+
+		if (undeclaredFeatures.length === 0) {
+			vscode.window.showWarningMessage('No undeclared features found');
+			return;
+		}
+
+		// we determine which Cargo.toml to edit
+		const members = discoverWorkspaceMembers(workspace.uri.fsPath);
+		let cargoTomlPath: string;
+		if (featureMemberPath) {
+			cargoTomlPath = path.join(workspace.uri.fsPath, featureMemberPath, 'Cargo.toml');
+		} else if (state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all') {
+			const member = members.find(m => m.name === state.selectedWorkspaceMember);
+			if (!member) {
+				vscode.window.showErrorMessage('Selected workspace member not found');
+				return;
+			}
+			cargoTomlPath = path.join(workspace.uri.fsPath, member.path, 'Cargo.toml');
+		} else {
+			cargoTomlPath = path.join(workspace.uri.fsPath, 'Cargo.toml');
+		}
+
+		if (!fs.existsSync(cargoTomlPath)) {
+			vscode.window.showErrorMessage(`Cargo.toml not found at ${cargoTomlPath}`);
+			return;
+		}
+
+		try {
+			const content = fs.readFileSync(cargoTomlPath, 'utf-8');
+			const lines = content.split('\n');
+			let featuresLineIndex = -1;
+			let inFeatures = false;
+			let lastFeatureLine = -1;
+			const existingFeatures = new Set<string>();
+
+			// we find the [features] section and collect existing features
+			for (let i = 0; i < lines.length; i++) {
+				const trimmed = lines[i].trim();
+
+				if (trimmed === '[features]') {
+					featuresLineIndex = i;
+					inFeatures = true;
+					continue;
+				}
+
+				if (trimmed.startsWith('[')) {
+					inFeatures = false;
+					continue;
+				}
+
+				if (inFeatures && trimmed.length > 0) {
+					const featureName = trimmed.split('=')[0].trim();
+					existingFeatures.add(featureName);
+					lastFeatureLine = i;
+				}
+			}
+
+			// we filter out features that already exist
+			const featuresToAdd = undeclaredFeatures.filter((f: UnregisteredItem) => !existingFeatures.has(f.name));
+
+			if (featuresToAdd.length === 0) {
+				vscode.window.showInformationMessage('All undeclared features are already declared');
+				return;
+			}
+
+			// we add the features
+			const newFeatureLines = featuresToAdd.map((f: UnregisteredItem) => `${f.name} = []`);
+
+			if (featuresLineIndex === -1) {
+				// we need to add [features] section
+				lines.push('', '[features]', ...newFeatureLines);
+			} else {
+				// we insert after the last feature line or right after [features]
+				const insertIndex = lastFeatureLine >= 0 ? lastFeatureLine + 1 : featuresLineIndex + 1;
+				lines.splice(insertIndex, 0, ...newFeatureLines);
+			}
+
+		fs.writeFileSync(cargoTomlPath, lines.join('\n'), 'utf-8');
+		vscode.window.showInformationMessage(`Declared ${featuresToAdd.length} feature(s): ${featuresToAdd.map((f: UnregisteredItem) => f.name).join(', ')}`);
+		cargoTreeProvider.refresh();
+		await autoFormatCargoToml(cargoTomlPath, undefined, `Declared ${featuresToAdd.length} feature(s)`);
+	} catch (error) {
+		vscode.window.showErrorMessage(`Failed to declare features: ${error}`);
+	}
+});
+
+register('cargui.declareAllUndeclaredFeatures', async (itemOrPath?: CargoTreeItem | string) => {
+	// When called from inline button, we get the tree item; when called from context menu, we might get memberPath
+	// Extract memberPath if needed
+	let memberPath: string | undefined;
+	if (typeof itemOrPath === 'string') {
+		memberPath = itemOrPath;
+	}
+	// If it's a tree item, memberPath should come from state
+	return vscode.commands.executeCommand('cargui.declareSelectedFeatures', memberPath);
+});
+
+register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 		if (!item?.envVar) {
 			return;
 		}
@@ -3436,6 +3601,411 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			return;
 		}
 		await cargoTreeProvider.registerUnknownTarget(item.unknownData, 'bench');
+	});
+
+	register('cargui.registerAllUnknownTargets', async () => {
+		const workspace = vscode.workspace.workspaceFolders?.[0];
+		if (!workspace) {
+			return;
+		}
+
+		const members = discoverWorkspaceMembers(workspace.uri.fsPath);
+		const targetMemberPath = state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all'
+			? members.find(m => m.name === state.selectedWorkspaceMember)?.path
+			: undefined;
+		
+		const unknownTargets = cargoTreeProvider.getUnknownTargets(targetMemberPath);
+		
+		if (unknownTargets.length === 0) {
+			vscode.window.showInformationMessage('No unknown targets to register');
+			return;
+		}
+
+		// we register each unknown target, prompting user for type
+		let successCount = 0;
+		for (const target of unknownTargets) {
+			try {
+				// we prepare quickpick options with inferred type at top
+				const typeOptions: vscode.QuickPickItem[] = [
+					{ label: 'Binary', description: target.type === 'bin' ? '(inferred)' : '', detail: 'Executable target' },
+					{ label: 'Example', description: target.type === 'example' ? '(inferred)' : '', detail: 'Example target' },
+					{ label: 'Test', description: target.type === 'test' ? '(inferred)' : '', detail: 'Test target' },
+					{ label: 'Benchmark', description: target.type === 'bench' ? '(inferred)' : '', detail: 'Benchmark target' }
+				];
+
+				// we sort so inferred type appears first
+				typeOptions.sort((a, b) => {
+					if (a.description && !b.description) return -1;
+					if (!a.description && b.description) return 1;
+					return 0;
+				});
+
+				const selected = await vscode.window.showQuickPick(typeOptions, {
+					placeHolder: `Register "${target.name}" as...`,
+					title: `Register ${target.name} [${target.path}] (${successCount + 1}/${unknownTargets.length})`
+				});
+
+				if (!selected) {
+					// we stop if user cancels
+					break;
+				}
+
+				const typeMap: Record<string, 'bin' | 'example' | 'test' | 'bench'> = {
+					'Binary': 'bin',
+					'Example': 'example',
+					'Test': 'test',
+					'Benchmark': 'bench'
+				};
+
+				await cargoTreeProvider.registerUnknownTarget(target, typeMap[selected.label]);
+				successCount++;
+			} catch (error) {
+				console.error(`Failed to register ${target.name}:`, error);
+			}
+		}
+
+		if (successCount > 0) {
+			vscode.window.showInformationMessage(`Registered ${successCount} target(s)`);
+		}
+	});
+
+	// We open the root workspace Cargo.toml file in the editor when the project header is clicked
+	register('cargui.openProjectCargoToml', async (memberName: string | null | undefined) => {
+		console.log('[cargUI] openProjectCargoToml called with memberName:', memberName);
+		const workspace = vscode.workspace.workspaceFolders?.[0];
+		if (!workspace) {
+			vscode.window.showErrorMessage('No workspace folder found');
+			return;
+		}
+
+		let cargoTomlPath: string;
+		let resolvedMemberName = memberName;
+
+		// if no member name passed, check if one is selected in the tree provider
+		// this handles context menu invocation from the project header
+		if (!resolvedMemberName) {
+			resolvedMemberName = cargoTreeProvider.getSelectedWorkspaceMember();
+			console.log('[cargUI] Resolved memberName from tree provider:', resolvedMemberName);
+		}
+
+		// we check if a member name was resolved (from argument or tree provider)
+		if (resolvedMemberName && resolvedMemberName !== 'all') {
+			// we open the selected member's Cargo.toml
+			const members = discoverWorkspaceMembers(workspace.uri.fsPath);
+			const member = members.find(m => m.name === resolvedMemberName);
+			
+			if (member) {
+				cargoTomlPath = path.join(workspace.uri.fsPath, member.path, 'Cargo.toml');
+				console.log('[cargUI] Opening member Cargo.toml at:', cargoTomlPath);
+			} else {
+				vscode.window.showErrorMessage(`Workspace member "${resolvedMemberName}" not found`);
+				return;
+			}
+		} else {
+			// we open the root workspace Cargo.toml
+			cargoTomlPath = path.join(workspace.uri.fsPath, 'Cargo.toml');
+			console.log('[cargUI] Opening root Cargo.toml at:', cargoTomlPath);
+		}
+
+		if (!fs.existsSync(cargoTomlPath)) {
+			vscode.window.showErrorMessage('Cargo.toml not found');
+			return;
+		}
+
+		try {
+			const document = await vscode.workspace.openTextDocument(cargoTomlPath);
+			await vscode.window.showTextDocument(document);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to open Cargo.toml: ${error}`);
+		}
+	});
+
+	// We open the main.rs or lib.rs file when "View in main target" is clicked
+	register('cargui.viewInMainTarget', async (item: CargoTreeItem) => {
+		if (!workspaceFolder) {
+			return;
+		}
+
+		// we only handle modules and members - for project header without member, bail
+		if (!item?.moduleInfo && !item?.workspaceMember) {
+			return;
+		}
+
+		let filePath: string;
+		let moduleInfo = item?.moduleInfo;
+
+		// Determine the target based on context
+		let memberPath = '';
+		if (item?.workspaceMember) {
+			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+			const member = members.find(m => m.name === item.workspaceMember);
+			if (!member) {
+				vscode.window.showErrorMessage(`Workspace member "${item.workspaceMember}" not found`);
+				return;
+			}
+			memberPath = member.path;
+		}
+
+		const basePath = memberPath 
+			? path.join(workspaceFolder.uri.fsPath, memberPath)
+			: workspaceFolder.uri.fsPath;
+
+		const mainRsPath = path.join(basePath, 'src/main.rs');
+		const libRsPath = path.join(basePath, 'src/lib.rs');
+
+		if (fs.existsSync(mainRsPath)) {
+			filePath = mainRsPath;
+		} else if (fs.existsSync(libRsPath)) {
+			filePath = libRsPath;
+		} else {
+			vscode.window.showErrorMessage(`No main.rs or lib.rs found in ${memberPath || 'workspace root'}`);
+			return;
+		}
+
+		try {
+			const doc = await vscode.workspace.openTextDocument(filePath);
+			const editor = await vscode.window.showTextDocument(doc);
+
+			// we go to module's exposure line if this is a module item
+			if (moduleInfo && moduleInfo.name) {
+				const content = doc.getText();
+				const lines = content.split('\n');
+				
+				// we search for the module declaration like "pub mod name" or "mod name"
+				const moduleName = moduleInfo.name.replace(/\.rs$/, ''); // remove .rs extension if present
+				const modulePattern = new RegExp(`^\\s*(pub\\s+)?mod\\s+${moduleName}\\b`);
+				
+				for (let i = 0; i < lines.length; i++) {
+					if (modulePattern.test(lines[i])) {
+						// we go to the module declaration line
+						const line = i;
+						const character = 0;
+						editor.selection = new vscode.Selection(
+							new vscode.Position(line, character),
+							new vscode.Position(line, character)
+						);
+						editor.revealRange(
+							new vscode.Range(
+								new vscode.Position(line, character),
+								new vscode.Position(line, character)
+							),
+							vscode.TextEditorRevealType.InCenter
+						);
+						return;
+					}
+				}
+			}
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to open file: ${error}`);
+		}
+	});
+
+	// We open the documentation for the crate when "View documentation" is clicked
+	register('cargui.viewDocumentation', async (item: CargoTreeItem) => {
+		if (!workspaceFolder) {
+			return;
+		}
+
+		// if this is a module, we open the module's documentation
+		if (item?.moduleInfo) {
+			const moduleName = item.moduleInfo.name;
+			
+			// we need to find which member/package this module belongs to
+			// by checking which member has this module in their src directory
+			let packageName = '';
+			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+			
+			for (const member of members) {
+				const memberPath = path.join(workspaceFolder.uri.fsPath, member.path);
+				const cargoToml = path.join(memberPath, 'Cargo.toml');
+				
+				if (fs.existsSync(cargoToml)) {
+					const content = fs.readFileSync(cargoToml, 'utf-8');
+					const matches = content.match(/\[package\]([\s\S]*?)name\s*=\s*"([^"]+)"/);
+					if (matches && matches[2]) {
+						// check if this member's src directory contains the module
+						const modulePath = path.join(memberPath, 'src', item.moduleInfo.name);
+						const modulePathRs = path.join(memberPath, 'src', item.moduleInfo.name + '.rs');
+						
+						if (fs.existsSync(modulePath) || fs.existsSync(modulePathRs)) {
+							packageName = matches[2];
+							break;
+						}
+					}
+				}
+			}
+
+			if (!packageName) {
+				vscode.window.showWarningMessage('Could not determine which package contains this module');
+				return;
+			}
+
+			// we convert the package name to crate name (hyphens to underscores)
+			const crateName = packageName.replace(/-/g, '_');
+			
+			// we convert the module path to documentation path (src/modules/blue_module.rs -> blue_module)
+			const modulePath = moduleName.replace(/\.rs$/, '').replace(/\//g, '/');
+			
+			// we build local documentation first
+			const terminal = vscode.window.createTerminal({
+				name: `Cargo Doc - ${packageName}`,
+				cwd: workspaceFolder.uri.fsPath
+			});
+			terminal.show();
+			terminal.sendText(`cargo doc -p ${packageName} --no-deps`);
+
+			// we then open the specific module's documentation
+			setTimeout(() => {
+				const docPath = path.join(
+					workspaceFolder.uri.fsPath,
+					'target',
+					'doc',
+					crateName,
+					modulePath,
+					'index.html'
+				);
+				
+				if (fs.existsSync(docPath)) {
+					vscode.env.openExternal(vscode.Uri.file(docPath));
+				} else {
+					vscode.window.showWarningMessage(`Documentation not found at ${docPath}`);
+				}
+			}, 3000); // we wait 3 seconds for cargo doc to complete
+			return;
+		}
+
+		// for project header, we need a workspace member to be selected
+		// we get the selected member from the tree provider state, not from item properties
+		// (tree items don't reliably preserve custom properties through context menu invocation)
+		const selectedMember = cargoTreeProvider.getSelectedWorkspaceMember();
+		
+		if (!selectedMember || selectedMember === 'all') {
+			// we only allow docs command when a specific member is selected
+			return;
+		}
+
+		// we use the explicitly selected member from the tree provider
+		const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+		const selectedMemberInfo = members.find(m => m.name === selectedMember);
+		
+		if (!selectedMemberInfo) {
+			vscode.window.showErrorMessage(`Workspace member "${selectedMember}" not found`);
+			return;
+		}
+
+		let packageName = '';
+		const memberCargoToml = path.join(workspaceFolder.uri.fsPath, selectedMemberInfo.path, 'Cargo.toml');
+		if (fs.existsSync(memberCargoToml)) {
+			const content = fs.readFileSync(memberCargoToml, 'utf-8');
+			const matches = content.match(/\[package\]([\s\S]*?)name\s*=\s*"([^"]+)"/);
+			if (matches && matches[2]) {
+				packageName = matches[2];
+			}
+		}
+
+		if (!packageName) {
+			vscode.window.showWarningMessage('Could not determine package name for member');
+			return;
+		}
+
+		// we convert the package name to crate name (hyphens to underscores)
+		const crateName = packageName.replace(/-/g, '_');
+
+		// we build local documentation first
+		const terminal = vscode.window.createTerminal({
+			name: `Cargo Doc - ${packageName}`,
+			cwd: workspaceFolder.uri.fsPath
+		});
+		terminal.show();
+		terminal.sendText(`cargo doc -p ${packageName} --no-deps`);
+
+		// we then open the documentation at the correct path (not relying on --open which might open a binary)
+		setTimeout(() => {
+			const docPath = path.join(
+				workspaceFolder.uri.fsPath,
+				'target',
+				'doc',
+				crateName,
+				'index.html'
+			);
+			
+			if (fs.existsSync(docPath)) {
+				vscode.env.openExternal(vscode.Uri.file(docPath));
+			} else {
+				vscode.window.showWarningMessage(`Documentation not found at ${docPath}`);
+			}
+		}, 3000);
+	});
+
+	// We open the main.rs or lib.rs file of a workspace member
+	register('cargui.viewMemberMainTarget', async (item: CargoTreeItem) => {
+		if (!workspaceFolder || !item?.workspaceMember) {
+			return;
+		}
+
+		const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+		const member = members.find(m => m.name === item.workspaceMember);
+		if (!member) {
+			vscode.window.showErrorMessage(`Workspace member "${item.workspaceMember}" not found`);
+			return;
+		}
+
+		const basePath = path.join(workspaceFolder.uri.fsPath, member.path);
+		const mainRsPath = path.join(basePath, 'src/main.rs');
+		const libRsPath = path.join(basePath, 'src/lib.rs');
+
+		let filePath: string;
+		if (fs.existsSync(mainRsPath)) {
+			filePath = mainRsPath;
+		} else if (fs.existsSync(libRsPath)) {
+			filePath = libRsPath;
+		} else {
+			vscode.window.showErrorMessage(`No main.rs or lib.rs found in ${member.name}`);
+			return;
+		}
+
+		try {
+			const doc = await vscode.workspace.openTextDocument(filePath);
+			await vscode.window.showTextDocument(doc);
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to open file: ${error}`);
+		}
+	});
+
+	// We open the documentation for a workspace member's crate
+	register('cargui.viewMemberDocs', async (item: CargoTreeItem) => {
+		if (!workspaceFolder || !item?.workspaceMember) {
+			return;
+		}
+
+		// we build local documentation for the workspace member and then open it
+		const memberName = item.workspaceMember;
+		
+		// we build the documentation (no-deps to skip dependencies, making it faster)
+		const buildCmd = `cargo doc -p ${memberName} --no-deps`;
+		
+		// we create a terminal to run the command
+		const terminal = vscode.window.createTerminal({
+			name: `Cargo Doc - ${memberName}`,
+			cwd: workspaceFolder.uri.fsPath
+		});
+		terminal.show();
+		terminal.sendText(buildCmd);
+
+		// we open the documentation in browser after build completes
+		// cargo doc generates docs at target/doc/<crate_name>/index.html
+		// crate names convert hyphens to underscores, so we need to check both forms
+		setTimeout(() => {
+			const docDir = path.join(workspaceFolder.uri.fsPath, 'target', 'doc');
+			
+			// we convert package name (with hyphens) to crate name (with underscores)
+			const crateName = memberName.replace(/-/g, '_');
+			const docPath = path.join(docDir, crateName, 'index.html');
+			
+			if (fs.existsSync(docPath)) {
+				vscode.env.openExternal(vscode.Uri.file(docPath));
+			}
+		}, 2500); // we wait 2.5 seconds for cargo doc to complete
 	});
 
 	return disposables;
