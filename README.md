@@ -1,4 +1,4 @@
-# cargUI - The Complete Rust Development Interface for VS Code & Cursor
+# cargUI - The Complete Rust Development Interface
 
 **A comprehensive extension that transforms your Rust development workflow.** cargUI provides a unified visual interface for Cargo, Rustup, project organization, and code analysis—all accessible from your sidebar.
 

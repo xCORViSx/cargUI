@@ -2,6 +2,16 @@
 
 All notable changes to the cargUI extension will be documented in this file.
 
+## [1.1.4] - 2025-11-21
+
+### 📝 Documentation Update
+
+**Changed:**
+
+- Updated README.md with user edits
+
+---
+
 ## [1.1.3] - 2025-11-21
 
 ### 🔧 Undeclared Module Text Color Fix
