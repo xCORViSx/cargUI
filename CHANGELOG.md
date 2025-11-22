@@ -2,6 +2,32 @@
 
 All notable changes to the cargUI extension will be documented in this file.
 
+## [1.1.2] - 2025-11-21
+
+### 🔧 Module Declaration & Context Value Fix
+
+**Fixed:**
+
+- **TreeItem contextValue not being set** - Fixed critical bug where `contextValue` parameter in `CargoTreeItem` constructor was declared as `public readonly` but never explicitly assigned to `this.contextValue`, causing VS Code to not recognize context values for menu contributions
+- **Module declaration buttons now appear** - Individual undeclared modules now display inline "Declare Module" button
+- **Category-wide declaration button** - Modules category displays "Declare All Undeclared Modules" inline button when undeclared modules exist
+
+**Changed:**
+
+- **Module health ignores privateness** - Module health color (blue/green) now based solely on documentation percentage (0-50% no color, 50-90% blue, 90-100% green)
+- **Visibility indicators inverted** - Private modules now show "(priv)" indicator; public modules have no indicator (since public is more common)
+- **Multi-member workspace support** - "Declare All" command now processes all workspace members when no specific member selected, matching the module counting logic used for the category icon
+
+**Technical:**
+
+- Changed `CargoTreeItem` constructor parameter from `public readonly contextValue: string` to `contextValue: string` and added explicit `this.contextValue = contextValue` assignment (treeItems.ts:46-50)
+- Added `UndeclaredModule = 'undeclaredModule'` to `TreeItemContext` enum (types.ts:30)
+- Modified `buildModuleTree` to set `contextValue` conditionally based on `mod.isDeclared` (moduleDetection.ts:364)
+- Updated `declareAllUndeclaredModules` command to iterate through all workspace members when applicable (commands.ts:3234-3350)
+- Removed `resourceScheme` requirement from modules category inline button when clause (package.json:1175)
+
+---
+
 ## [1.1.1] - 2025-11-21
 
 ### 🔧 Modules Notification Fix

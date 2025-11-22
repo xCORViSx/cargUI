@@ -882,7 +882,6 @@ export class CargoTreeDataProvider implements
             if (totalUndeclared > 0) {
                 modulesItem.resourceUri = vscode.Uri.parse(`cargui-modules-category:has-undeclared`);
                 modulesItem.iconPath = new vscode.ThemeIcon('package', new vscode.ThemeColor('charts.red'));
-                console.log('[cargUI] Modules category has', totalUndeclared, 'undeclared modules, resourceUri set');
             }
             
             items.push(modulesItem);

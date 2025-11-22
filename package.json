@@ -2,7 +2,7 @@
   "name": "cargUI",
   "displayName": "cargUI",
   "description": "Native VSCode UI for Rust projects!",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "publisher": "xCORViSx",
   "icon": "cargui-icon.png",
   "repository": {
@@ -515,6 +515,18 @@
       {
         "command": "cargui.declareAllUndeclaredFeatures",
         "title": "Declare All Undeclared Features",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.declareModule",
+        "title": "Declare Module",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.declareAllUndeclaredModules",
+        "title": "Declare All Undeclared Modules",
         "category": "cargUI",
         "icon": "$(add)"
       },
@@ -1145,6 +1157,26 @@
         {
           "command": "cargui.declareAllUndeclaredFeatures",
           "when": "view == cargoTargets && viewItem == featuresCategory",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "cargui.declareModule",
+          "when": "view == cargoTargets && viewItem == undeclaredModule",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.declareModule",
+          "when": "view == cargoTargets && viewItem == undeclaredModule",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "cargui.declareAllUndeclaredModules",
+          "when": "view == cargoTargets && viewItem == modulesCategory",
+          "group": "inline@3"
+        },
+        {
+          "command": "cargui.declareAllUndeclaredModules",
+          "when": "view == cargoTargets && viewItem == modulesCategory",
           "group": "1_actions@3"
         },
         {

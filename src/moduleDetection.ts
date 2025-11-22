@@ -305,7 +305,7 @@ export function findUndeclaredModules(basePath: string, declaredModules: Set<str
  * Health is determined by counting code elements (structs, functions, enums, etc.)
  * and checking what percentage have doc comments.
  * 
- * The health scale is:
+ * The health scale (privateness has no bearing on health):
  * - 0-50%: No color (underdocumented)
  * - 50-90%: Blue (moderately documented)
  * - 90-100%: Green (well documented)
@@ -351,18 +351,17 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
     return modules.map(mod => {
         const hasChildren = mod.children.length > 0;
         
-        // Determine icon based on visibility and type
+        // Determine icon based on type
         let iconName = 'file-code';
-        if (mod.isPublic) {
-            iconName = 'symbol-namespace'; // Public modules get special icon
-        } else if (mod.isDirectory) {
+        if (mod.isDirectory) {
             iconName = 'folder';
         }
         
+        const contextValue = mod.isDeclared ? TreeItemContext.Module : TreeItemContext.UndeclaredModule;
         const item = new CargoTreeItem(
             mod.name,
             hasChildren ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
-            TreeItemContext.Module,
+            contextValue,
             {
                 iconName: iconName,
                 moduleInfo: mod,
@@ -376,8 +375,8 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
         if (!mod.isDeclared) {
             tooltipParts.push('⚠️ Not declared with \'mod\' statement');
         }
-        if (mod.isPublic) {
-            tooltipParts.push('🌐 Public module (pub mod)');
+        if (!mod.isPublic) {
+            tooltipParts.push('🔒 Private module');
         }
         if (mod.hasDocComment) {
             tooltipParts.push('📝 Has module documentation');
@@ -408,8 +407,8 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
         if (mod.isDirectory) {
             descParts.push('(dir)');
         }
-        if (mod.isPublic) {
-            descParts.push('pub');
+        if (!mod.isPublic) {
+            descParts.push('(priv)');
         }
         
         // Add health indicator if we have element data
@@ -428,17 +427,19 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
         if (!mod.isDeclared) {
             // Red: Undeclared modules (not declared with mod statement)
             color = 'charts.red';
+            // we set a special resourceUri for undeclared modules so inline buttons appear
+            item.resourceUri = vscode.Uri.parse(`cargui-undeclared-module:${moduleKey}`);
         } else {
             // Use new health-based color system for declared modules
             const health = calculateModuleHealth(mod);
             if (health) {
                 color = health.color;
+                item.resourceUri = vscode.Uri.parse(`cargui-module:${moduleKey}`);
             }
         }
         
         // Apply coloring
         if (color) {
-            item.resourceUri = vscode.Uri.parse(`cargui-module:${moduleKey}`);
             if (decorationProvider) {
                 decorationProvider.setTargetColor(moduleKey, color);
             }

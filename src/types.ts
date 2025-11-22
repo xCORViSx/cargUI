@@ -28,6 +28,7 @@ export const enum TreeItemContext {
     // Items
     WorkspaceMember = 'workspaceMember',
     Module = 'module',
+    UndeclaredModule = 'undeclaredModule',
     ModuleMember = 'moduleMember',
     Target = 'target',
     UnknownTarget = 'unknownTarget',

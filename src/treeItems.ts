@@ -43,10 +43,11 @@ export class CargoTreeItem extends vscode.TreeItem {
     constructor(
         public readonly label: string,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly contextValue: string,
+        contextValue: string,
         options?: CargoTreeItemOptions
     ) {
         super(label, collapsibleState);
+        this.contextValue = contextValue;
         
         // Apply options
         if (options) {

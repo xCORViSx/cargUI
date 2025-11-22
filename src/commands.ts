@@ -13,7 +13,8 @@ import {
 	Dependency,
 	CargoTarget,
 	UnregisteredItem,
-	DetectionResult
+	DetectionResult,
+	ModuleInfo
 } from './types';
 import {
 	discoverWorkspaceMembers,
@@ -27,6 +28,7 @@ import {
 	removeDuplicateDependencies
 } from './cargoToml';
 import { detectUndeclaredFeatures } from './smartDetection';
+import { detectModules } from './moduleDetection';
 import {
 	fetchCrateMetadata,
 	fetchCrateVersions,
@@ -3147,6 +3149,205 @@ register('cargui.declareAllUndeclaredFeatures', async (itemOrPath?: CargoTreeIte
 	}
 	// If it's a tree item, memberPath should come from state
 	return vscode.commands.executeCommand('cargui.declareSelectedFeatures', memberPath);
+});
+
+register('cargui.declareModule', async (item: CargoTreeItem) => {
+	const moduleInfo = item?.moduleInfo;
+	if (!moduleInfo || !moduleInfo.name) {
+		return;
+	}
+
+	const workspace = vscode.workspace.workspaceFolders?.[0];
+	if (!workspace) {
+		return;
+	}
+
+	// we determine which main target file to edit (main.rs or lib.rs)
+	const members = discoverWorkspaceMembers(workspace.uri.fsPath);
+	let targetPath: string;
+	let memberPath = '';
+
+	if (item.workspaceMember) {
+		const member = members.find(m => m.name === item.workspaceMember);
+		if (!member) {
+			vscode.window.showErrorMessage('Workspace member not found');
+			return;
+		}
+		memberPath = member.path;
+	} else if (state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all') {
+		const member = members.find(m => m.name === state.selectedWorkspaceMember);
+		if (member) {
+			memberPath = member.path;
+		}
+	}
+
+	const basePath = memberPath 
+		? path.join(workspace.uri.fsPath, memberPath)
+		: workspace.uri.fsPath;
+
+	const mainRsPath = path.join(basePath, 'src/main.rs');
+	const libRsPath = path.join(basePath, 'src/lib.rs');
+
+	if (fs.existsSync(libRsPath)) {
+		targetPath = libRsPath;
+	} else if (fs.existsSync(mainRsPath)) {
+		targetPath = mainRsPath;
+	} else {
+		vscode.window.showErrorMessage(`No main.rs or lib.rs found in ${memberPath || 'workspace root'}`);
+		return;
+	}
+
+	try {
+		const content = fs.readFileSync(targetPath, 'utf-8');
+		const lines = content.split('\n');
+		
+		// we check if module is already declared
+		const moduleName = moduleInfo.name.replace(/\.rs$/, '');
+		const modulePattern = new RegExp(`^\\s*(pub\\s+)?mod\\s+${moduleName}\\b`);
+		
+		for (const line of lines) {
+			if (modulePattern.test(line)) {
+				vscode.window.showInformationMessage(`Module "${moduleName}" is already declared`);
+				return;
+			}
+		}
+
+		// we add the module declaration at the top after any initial comments/attributes
+		let insertIndex = 0;
+		for (let i = 0; i < lines.length; i++) {
+			const trimmed = lines[i].trim();
+			if (trimmed.startsWith('//') || trimmed.startsWith('#[') || trimmed.startsWith('#![') || trimmed === '') {
+				insertIndex = i + 1;
+			} else {
+				break;
+			}
+		}
+
+		lines.splice(insertIndex, 0, `mod ${moduleName};`);
+		fs.writeFileSync(targetPath, lines.join('\n'), 'utf-8');
+		vscode.window.showInformationMessage(`Declared module: ${moduleName}`);
+		cargoTreeProvider.refresh();
+	} catch (error) {
+		vscode.window.showErrorMessage(`Failed to declare module: ${error}`);
+	}
+});
+
+register('cargui.declareAllUndeclaredModules', async () => {
+	const workspace = vscode.workspace.workspaceFolders?.[0];
+	if (!workspace) {
+		return;
+	}
+
+	// we get all undeclared modules - if multi-member workspace and no specific member selected, process all
+	const members = discoverWorkspaceMembers(workspace.uri.fsPath);
+	const allUndeclaredModules: Array<{ module: ModuleInfo, memberPath: string, memberName: string }> = [];
+
+	if (members.length > 1 && (!state.selectedWorkspaceMember || state.selectedWorkspaceMember === 'all')) {
+		// Multi-member workspace, process all members
+		for (const member of members) {
+			const srcPath = path.join(workspace.uri.fsPath, member.path, 'src');
+			const modules = detectModules(srcPath);
+			const undeclared = modules.filter(m => !m.isDeclared);
+			undeclared.forEach(m => {
+				allUndeclaredModules.push({
+					module: m,
+					memberPath: member.path,
+					memberName: member.name
+				});
+			});
+		}
+	} else {
+		// Single member or specific member selected
+		let memberPath = '';
+		if (state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all') {
+			const member = members.find(m => m.name === state.selectedWorkspaceMember);
+			if (member) {
+				memberPath = member.path;
+			}
+		}
+
+		const basePath = memberPath 
+			? path.join(workspace.uri.fsPath, memberPath)
+			: workspace.uri.fsPath;
+
+		const srcPath = path.join(basePath, 'src');
+		const modules = detectModules(srcPath);
+		const undeclared = modules.filter(m => !m.isDeclared);
+		undeclared.forEach(m => {
+			allUndeclaredModules.push({
+				module: m,
+				memberPath: memberPath,
+				memberName: state.selectedWorkspaceMember || ''
+			});
+		});
+	}
+
+	if (allUndeclaredModules.length === 0) {
+		vscode.window.showInformationMessage('No undeclared modules found');
+		return;
+	}
+
+	// we group by member and declare in each member's root file
+	const byMember = new Map<string, ModuleInfo[]>();
+	for (const item of allUndeclaredModules) {
+		if (!byMember.has(item.memberPath)) {
+			byMember.set(item.memberPath, []);
+		}
+		byMember.get(item.memberPath)!.push(item.module);
+	}
+
+	let totalDeclared = 0;
+	for (const [memberPath, modules] of byMember) {
+		const basePath = memberPath 
+			? path.join(workspace.uri.fsPath, memberPath)
+			: workspace.uri.fsPath;
+
+		// we determine which main target file to edit (main.rs or lib.rs)
+		const mainRsPath = path.join(basePath, 'src/main.rs');
+		const libRsPath = path.join(basePath, 'src/lib.rs');
+		let targetPath: string;
+
+		if (fs.existsSync(libRsPath)) {
+			targetPath = libRsPath;
+		} else if (fs.existsSync(mainRsPath)) {
+			targetPath = mainRsPath;
+		} else {
+			continue; // Skip this member if no root file
+		}
+
+		try {
+			const content = fs.readFileSync(targetPath, 'utf-8');
+			const lines = content.split('\n');
+			
+			// we find where to insert declarations (after initial comments/attributes)
+			let insertIndex = 0;
+			for (let i = 0; i < lines.length; i++) {
+				const trimmed = lines[i].trim();
+				if (trimmed.startsWith('//') || trimmed.startsWith('#[') || trimmed.startsWith('#![') || trimmed === '') {
+					insertIndex = i + 1;
+				} else {
+					break;
+				}
+			}
+
+			// we add all undeclared modules
+			const moduleDeclarations = modules.map(m => {
+				const moduleName = m.name.replace(/\.rs$/, '');
+				return `mod ${moduleName};`;
+			});
+
+			lines.splice(insertIndex, 0, ...moduleDeclarations);
+			fs.writeFileSync(targetPath, lines.join('\n'), 'utf-8');
+			totalDeclared += modules.length;
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to declare modules in ${memberPath}: ${error}`);
+		}
+	}
+
+	if (totalDeclared > 0) {
+		vscode.window.showInformationMessage(`Declared ${totalDeclared} module(s)`);
+		cargoTreeProvider.refresh();
+	}
 });
 
 register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
