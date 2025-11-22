@@ -2,6 +2,16 @@
 
 All notable changes to the cargUI extension will be documented in this file.
 
+## [1.1.5] - 2025-11-21
+
+### 📝 Documentation Update
+
+**Changed:**
+
+- Added Open VSX Registry links alongside VS Code Marketplace references in README
+
+---
+
 ## [1.1.4] - 2025-11-21
 
 ### 📝 Documentation Update

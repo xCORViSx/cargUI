@@ -37,7 +37,7 @@ cargUI is a **visual Rust development companion** covering:
 
 ## 🚀 Quick Start
 
-1. **Install** the extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=xCORViSx.cargui)
+1. **Install** the extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=xCORViSx.cargui) or [Open VSX](https://open-vsx.org/extension/xCORViSx/cargUI)
 2. **Open** any Rust project with `Cargo.toml`
 3. **Find** the Cargo tree view in your Explorer sidebar
 4. **Check** a target → Click **Build/Run/Test**
@@ -773,6 +773,7 @@ MIT License - See [LICENSE](LICENSE) file
 
 - [GitHub Repository](https://github.com/xCORViSx/cargUI)
 - [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=xCORViSx.cargui)
+- [Open VSX Registry](https://open-vsx.org/extension/xCORViSx/cargUI)
 - [Issue Tracker](https://github.com/xCORViSx/cargUI/issues)
 - [Contributing Guide](CONTRIBUTING.md)
 
