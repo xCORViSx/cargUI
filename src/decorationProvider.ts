@@ -43,7 +43,7 @@ export class DependencyDecorationProvider implements vscode.FileDecorationProvid
                 tooltip: 'Selected Workspace Member'
             };
         }
-        if (uri.scheme === 'cargui-target' || uri.scheme === 'cargui-rustup' || uri.scheme === 'cargui-module' || uri.scheme === 'cargui-feature') {
+        if (uri.scheme === 'cargui-target' || uri.scheme === 'cargui-rustup' || uri.scheme === 'cargui-module' || uri.scheme === 'cargui-undeclared-module' || uri.scheme === 'cargui-feature') {
             const color = this.targetColors.get(uri.path);
             if (color) {
                 return {

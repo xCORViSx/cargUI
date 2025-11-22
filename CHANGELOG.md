@@ -2,6 +2,20 @@
 
 All notable changes to the cargUI extension will be documented in this file.
 
+## [1.1.3] - 2025-11-21
+
+### 🔧 Undeclared Module Text Color Fix
+
+**Fixed:**
+
+- **Undeclared module text color restored** - Added `cargui-undeclared-module` scheme to decoration provider so text appears red again (not just icon)
+
+**Technical:**
+
+- Updated `decorationProvider.ts:46` to include `cargui-undeclared-module` scheme in color decoration check
+
+---
+
 ## [1.1.2] - 2025-11-21
 
 ### 🔧 Module Declaration & Context Value Fix

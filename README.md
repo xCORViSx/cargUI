@@ -97,7 +97,7 @@ Follows Rust best practices automatically!
 
 [^12]🟢 **Green** - Well-documented (90-100% of code elements have docs)  
 [^12]🔵 **Blue** - Moderately documented (50-90% of elements)  
-[^12]⚪ **Default** - Underdocumented (0-50% of elements) or private with docs  
+[^12]⚪ **Default** - Underdocumented (0-50% of elements)  
 [^13]🔴 **Red** - Undeclared modules (not in `mod` statements)  
 
 **Module health calculation (v1.0.8+):**
@@ -106,15 +106,23 @@ Follows Rust best practices automatically!
 - [^15]Checks each element for preceding `///` or `//!` doc comments
 - [^16]Shows percentage: "75% (6/8 elements)" in tooltip
 - Element-based (not file-level) for accurate documentation tracking
+- **Privateness has no bearing on health** (v1.1.2) - Color based solely on documentation percentage
 
 **Module information:**
 
-- Visibility (`pub mod` vs private)
+- Visibility: Private modules show **(priv)** indicator (v1.1.2)
 - Documentation percentage with element counts
 - [^17]Test presence (`#[test]`, `#[cfg(test)]`)
 - Directory vs single-file modules
 - Hierarchical structure
 - [^18]**Module counts** - Shows direct children count at all nesting levels
+
+**Module declaration (v1.1.2):**
+
+- 🔴 **Undeclared modules** display inline "Declare Module" button
+- Click to add `mod module_name;` to main.rs or lib.rs
+- **MODULES category** shows "Declare All Undeclared Modules" button when undeclared modules exist
+- Multi-member workspaces: Declares across all members or selected member only
 
 **Context-aware display:**
 
