@@ -1,6 +1,6 @@
 # cargUI - The Complete Rust Development Interface
 
-**A comprehensive extension that transforms your Rust development workflow.** cargUI provides a unified visual interface for Cargo, Rustup, project organization, and code analysis—all accessible from your sidebar.
+**A comprehensive extension that transforms your Rust development workflow.** cargUI provides a unified visual interface for Cargo, Rustup, package organization, and code analysis—all accessible from your sidebar.
 
 Works seamlessly in **VS Code** and **Cursor**!
 
@@ -15,7 +15,7 @@ Works seamlessly in **VS Code** and **Cursor**!
 
 cargUI is a **visual Rust development companion** covering:
 
-- [^1]**🎨 Project organization** - Smart detection, visualization, and management of various Rust project elements
+- [^1]**🎨 Package organization** - Smart detection, visualization, and management of various Rust package elements
 - [^2]**⚙️ Cargo integration** - Visual interface for all Cargo commands and features  
 - [^3]**🦀 Rust toolchain** - Rustup integration and toolchain management
 - [^4]**📦 Workspace support** - Intelligent multi-crate workspace handling
@@ -27,18 +27,20 @@ cargUI is a **visual Rust development companion** covering:
 **Stop typing terminal commands.** Start working visually:
 
 ✅ **Click** to build, run, test with precise configurations  
-✅ **See** project structure, modules, targets, and dependencies  
+✅ **See** package structure, modules, targets, and dependencies  
 ✅ **Detect** unregistered files and missing declarations automatically  
 ✅ **Switch** between development scenarios with snapshots  
 ✅ **Track** dependency versions and module health in real-time  
 ✅ **Manage** Rust toolchains without memorizing rustup commands  
+✅ **Switch** between multiple package folders with one click  
+✅ **Generate** AI-powered documentation for undocumented code
 
 ---
 
 ## 🚀 Quick Start
 
 1. **Install** the extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=xCORViSx.cargui) or [Open VSX](https://open-vsx.org/extension/xCORViSx/cargUI)
-2. **Open** any Rust project with `Cargo.toml`
+2. **Open** any Rust package with `Cargo.toml`
 3. **Find** the Cargo tree view in your Explorer sidebar
 4. **Check** a target → Click **Build/Run/Test**
 
@@ -52,7 +54,7 @@ cargUI is a **visual Rust development companion** covering:
 
 ## ✨ Feature Overview
 
-### 🏗️ Project Organization & Intelligence
+### 🏗️ Package Organization & Intelligence
 
 <details>
 <summary><b>Smart Detection System</b> - Auto-discover unregistered targets and missing features</summary>
@@ -95,23 +97,30 @@ Follows Rust best practices automatically!
 
 **Color-coded modules:**
 
-[^12]🟢 **Green** - Well-documented (90-100% of code elements have docs)  
-[^12]🔵 **Blue** - Moderately documented (50-90% of elements)  
-[^12]⚪ **Default** - Underdocumented (0-50% of elements)  
-[^13]🔴 **Red** - Undeclared modules (not in `mod` statements)  
 
 **Module health calculation (v1.0.8+):**
 
 - [^14]Counts individual code elements: functions, structs, enums, traits, types, constants, statics
 - [^15]Checks each element for preceding `///` or `//!` doc comments
+- **Module header (`//!`) counts as 1 item** (v1.2.0) - Now required for 100% health
 - [^16]Shows percentage: "75% (6/8 elements)" in tooltip
 - Element-based (not file-level) for accurate documentation tracking
 - **Privateness has no bearing on health** (v1.1.2) - Color based solely on documentation percentage
+
+**AI-Powered Documentation Improvement (v1.2.0):**
+
+- ✨ **Sparkle button** on every module and target enables one-click documentation generation
+- Automatically detects missing file headers (`//!`) and undocumented code elements
+- Uses GitHub Copilot for AI-powered documentation generation (free tier supported)
+- Smart context prioritization: GPT-4o analyzes most relevant files first (dependencies, same directory, related modules)
+- Real-time progress indicator shows generation status
+- Automatically inserts doc comments with proper indentation and refreshes tree view
 
 **Module information:**
 
 - Visibility: Private modules show **(priv)** indicator (v1.1.2)
 - Documentation percentage with element counts
+- Header status: Shows "📋 Has module header (//!)" or "Missing header (//!)" in tooltip (v1.2.0)
 - [^17]Test presence (`#[test]`, `#[cfg(test)]`)
 - Directory vs single-file modules
 - Hierarchical structure
@@ -128,7 +137,7 @@ Follows Rust best practices automatically!
 
 - [^19]When a workspace member is selected, shows only that member's modules
 - Automatically switches context when you select different workspace members
-- Clear separation of concerns in multi-crate projects
+- Clear separation of concerns in multi-crate packages
 
 **Click any module to open the file instantly!**
 
@@ -166,7 +175,6 @@ Follows Rust best practices automatically!
 - **Lock file refresh** - Cleans `Cargo.lock` before updates for reliable resolution
 - **Clear feedback** - Shows which dependencies succeeded vs failed
 
-[^27] **Real-time crates.io integration** - Shows latest available versions automatically
 
 
 **Auto-format Cargo.toml (v1.1.0):**
@@ -218,13 +226,36 @@ Follows Rust best practices automatically!
 - [^42] Checks directory correctness (binary in examples/ → yellow warning)
 - Intelligent hyphen/underscore handling (Cargo treats as equivalent)
 - Specific tooltip messages explain validation failures
+- **Resolve button** (🔧) - Click wrench icon on yellow targets to auto-fix issues:
+  - Moves file to correct directory for target type
+  - Renames target in Cargo.toml to match filename
+  - Fixes both issues simultaneously when present
 
-**Color-coded health:**
+**Color-coded display (v1.3.2):**
+
+**Target text colors** show documentation health:
 
 
-[^43] 🟡 **Yellow** - Target validation issues (name doesn't match filename, or wrong directory for target type)  
-[^44] 🔵 **Blue** - Custom location (non-standard path)  
-[^45] 🔴 **Red** - Unknown path or unregistered
+**Target icon colors** show validation status:
+
+⚫ **Gray** - Auto-discovered (found in standard directory but not declared in Cargo.toml)  
+🟡 **Bright Yellow** - Missing file (declared in Cargo.toml but file doesn't exist)
+
+**Auto-discovered targets:**
+
+- Targets in `examples/`, `tests/`, `benches/` without Cargo.toml entries display with gray icons
+- Tooltip shows "💡 Not declared in Cargo.toml (auto-discovered)"
+- Click **+** button to explicitly declare in Cargo.toml
+- After declaration, icon returns to normal color and button disappears
+
+**Missing file targets:**
+
+- Targets declared in Cargo.toml but with non-existent files display with bright yellow icons and text
+- Tooltip shows "⚠️ File does not exist (but declared in Cargo.toml)"
+- Click **🔧 Resolve Missing File** button for two recovery options:
+  - **Locate & Move Existing File**: Find the misplaced file (must match expected filename)
+  - **Create New File**: Generate template with proper structure for target type
+- After resolution, icon and text return to normal color
 
 **Features:**
 
@@ -236,11 +267,35 @@ Follows Rust best practices automatically!
 
 </details>
 
+<details>
+<summary><b>Multi-Root Workspace Support</b> - Manage multiple Rust packages simultaneously</summary>
+
+**VS Code Multi-Root Workspaces:**
+
+When you have multiple package folders open (File → Add Folder to Workspace), cargUI provides:
+
+- **Folder selector button** on package header (folder icon)
+- **Smart quick pick menu** showing workspaces sorted by last access
+- **Automatic file explorer sync**: collapses previous folder, expands selected folder
+- **Persistent selection**: remembers your choice across sessions
+- **Access history**: intelligently sorts by usage (most recent first, current last)
+
+**Usage:**
+
+1. Add multiple Rust packages to your VS Code workspace
+2. Click the folder icon on the package header
+3. Select which package to view/build
+4. Tree view updates to show selected package's targets, modules, dependencies
+5. All commands execute in the context of the selected workspace
+
+Perfect for monorepos, multi-package development, or comparing different Rust codebases!
+
+</details>
+
 
 <details>
 <summary><b>Feature Flags</b> - Visual feature management</summary>
 
-[^46] Parses `[features]` from Cargo.toml:
 
 ```toml
 [features]
@@ -291,7 +346,6 @@ cargo test --features json
 <details>
 <summary><b>Snapshots</b> - Save complete build configurations</summary>
 
-[^53] **A snapshot stores:**
 
 - Build mode (debug/release)
 - Checked targets
@@ -301,10 +355,10 @@ cargo test --features json
 
 **Auto-created snapshots:**
 
-- Binary projects (with `src/main.rs`) → "main" snapshot
-- Library projects (with `src/lib.rs`) → "lib" snapshot
-- Mixed projects (both) → Both snapshots created
-- Workspace projects → One per member
+- Binary packages (with `src/main.rs`) → "main" snapshot
+- Library packages (with `src/lib.rs`) → "lib" snapshot
+- Mixed packages (both) → Both snapshots created
+- Workspace packages → One per member
 
 **Workflow:**
 
@@ -326,7 +380,6 @@ cargo test --features json
 <details>
 <summary><b>Watch Mode</b> - Auto-recompile on file changes</summary>
 
-[^54] **Requires:** `cargo-watch` (extension offers to install)
 
 **Watch actions:**
 
@@ -358,6 +411,10 @@ Respects all your settings (features, env vars, etc.)!
 **Features:**
 
 - [^55] Shows current edition from `Cargo.toml` (e.g., "Edition: 2021")
+- **Workspace edition display**: Multi-crate workspaces show edition context
+  - When viewing workspace root: "Workspace Edition: 2021"
+  - When viewing specific member: "Edition: 2024 [WS: 2021]" (member edition + workspace edition)
+  - Tooltip provides detailed edition information for both levels
 - Click to change edition with a dropdown menu
 - [^56] Automatically fetches available editions from the official Rust Edition Guide
 - [^57] Future-proof: New editions appear automatically when documented by the Rust team
@@ -402,9 +459,8 @@ Respects all your settings (features, env vars, etc.)!
 ### 📦 Workspace Support
 
 <details>
-<summary><b>Multi-Crate Workspaces</b> - Full support for complex projects</summary>
+<summary><b>Multi-Crate Workspaces</b> - Full support for complex packages</summary>
 
-[^62] **Detects workspace structure:**
 
 ```toml
 [workspace]
@@ -440,7 +496,7 @@ members = ["cli", "api", "core", "utils"]
 **Context menus (v1.1.0):**
 
 - Right-click member → "View Cargo.toml", "View main target", "View documentation"
-- Right-click project header (when member selected) → Same three options
+- Right-click package header (when member selected) → Same three options
 - Right-click module → "View in main target" (jumps to `mod` declaration), "View documentation"
 - Module documentation opens local docs at correct module path
 - Member-specific documentation builds and opens correct crate docs
@@ -475,7 +531,6 @@ cargo build --workspace
 - `--port 8080`
 - `--config dev.toml`
 
-[^66] **Check to enable:**
 
 ```bash
 cargo run --bin server -- --verbose --port 8080
@@ -494,7 +549,6 @@ cargo run --bin server -- --verbose --port 8080
 - `RUST_LOG=debug` - Logging level
 - `DATABASE_URL=...` - Test database
 
-[^67] **Commands:**
 
 ```bash
 RUST_BACKTRACE=1 RUST_LOG=debug cargo run
@@ -505,7 +559,6 @@ RUST_BACKTRACE=1 RUST_LOG=debug cargo run
 <details>
 <summary><b>Custom Commands</b> - Save frequently-used cargo commands</summary>
 
-[^68] **Default commands:**
 
 - `cargo clippy` - Lint
 - `cargo search <crate>` - Search crates
@@ -529,7 +582,6 @@ Click to execute in terminal!
 
 ## ⌨️ Keyboard Shortcuts
 
-[^69] **Works with both binary and library targets!** If no target is checked, shortcuts automatically use `src/main.rs` or `src/lib.rs`.
 
 ### macOS
 
@@ -563,7 +615,6 @@ Click to execute in terminal!
 5. Save as "dev" snapshot
 ```
 
-[^73] **Result:** `cargo run --bin main --features database,logging`
 
 ### Multi-Crate Workspace
 
@@ -574,7 +625,6 @@ Click to execute in terminal!
 4. Click Build
 ```
 
-[^74] **Result:** `cargo build --package api --package shared --features ...`
 
 ### Testing with Logging
 
@@ -585,7 +635,6 @@ Click to execute in terminal!
 4. Click Test
 ```
 
-[^75] **Result:** `RUST_LOG=debug cargo test --test integration_tests`
 
 ### Watch Mode Development
 
@@ -673,11 +722,9 @@ npm run compile
     └── Tree Dependencies
 ```
 
-[^76][^77]---
 
 ## 🔧 Configuration
 
-[^78] Settings auto-initialize in `.vscode/settings.json`:
 
 ```json
 {
@@ -711,7 +758,7 @@ npm run compile
 ## 🐛 Troubleshooting
 
 **Q: Extension doesn't appear**  
-A: Open a Rust project with `Cargo.toml`
+A: Open a Rust package with `Cargo.toml`
 
 **Q: Targets not showing**  
 A: Check `Cargo.toml` for `[[bin]]`, `[[example]]` sections
@@ -738,7 +785,7 @@ npm run watch    # Auto-compile
 # Press F5 to test
 ```
 
-### Project Structure
+### Package Structure
 
 ```text
 cargUI/
@@ -758,7 +805,7 @@ cargUI/
 
 ## 📝 Version
 
-**Current:** v1.1.1  
+**Current:** v1.3.2  
 **See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and technical changes**
 
 ---
@@ -788,91 +835,3 @@ MIT License - See [LICENSE](LICENSE) file
 
 ---
 
-## 📚 Footnote Definitions
-
-[^1]: cargoTreeProvider.ts:121-248 - Smart detection triggers on tree refresh to identify unknown targets and undeclared features
-[^2]: cargoTreeProvider.ts:250-423 - getProjectNameAndVersion and getMemberNameAndVersion extract package metadata from Cargo.toml
-[^3]: decorationProvider.ts:1-91 - DecorationProvider applies color-coded badges (red, yellow, green, blue, orange) to tree items via resourceUri
-[^4]: cargoDiscovery.ts:101-270 - discoverCargoTargets parses Cargo.toml [bin], [lib], [[example]], [[test]], [[bench]] sections
-[^5]: cargoDiscovery.ts:401-512 - discoverCargoDependencies extracts workspace, production, dev, and build dependencies with version info
-[^6]: defaultConfig.ts:1-247 - initializeDefaultConfig creates .vscode/settings.json with cargui defaults on first activation
-
-[^7]: smartDetection.ts:11-280 - detectUnregisteredTargets finds source files in src/bin, examples, tests, benches not declared in Cargo.toml
-[^8]: smartDetection.ts:363-430 - detectUndeclaredFeatures finds #[cfg(feature = "name")] in code not present in [features] section
-[^9]: commands.ts:825-1047 - showSmartDetectionResults displays interactive panel for unknown targets and undeclared features
-[^10]: smartDetection.ts:298-340 - getTargetRegistrationInstructions provides code snippets to add missing targets to Cargo.toml
-[^11]: fileOperations.ts:32-48 - classifyTarget determines correct target type (bin/example/test/bench) based on file location
-
-[^12]: moduleDetection.ts:328-335 - detectModules scans src directory for .rs files and checks if declared via mod statements
-[^13]: moduleDetection.ts:305-345 - Module color coding: green (90-100% doc coverage), blue (50-90%), white (0-50%)
-[^14]: moduleDetection.ts:157-162 - isPublicModule checks for pub keyword in mod declarations
-[^15]: moduleDetection.ts:179-188 - calculateDocumentationCoverage counts /// doc comments vs public items
-[^16]: moduleDetection.ts:389-392 - Undeclared modules (no mod statement in main target) are colored red
-[^17]: moduleDetection.ts:119 - getMainTargetFile identifies entry point (main.rs or lib.rs) for mod statement verification
-[^18]: moduleDetection.ts:402-405 - Open module file command allows viewing/editing module source
-[^19]: commands.ts:1155-1299 - toggleModuleVisibility adds/removes pub keyword in mod declarations
-
-[^21]: decorationProvider.ts:30-31 - Red (charts.red) indicates errors: undeclared modules, unknown targets, outdated dependencies
-[^23]: cargoDiscovery.ts:359-390 - getLatestVersion queries crates.io API for newest available dependency version
-[^24]: cargoTreeProvider.ts:1973-1995 - Dependency color coding based on version status (latest/outdated/local/workspace)
-[^25]: cargoTreeProvider.ts:2030-2032 - Workspace dependencies display member path and use blue coloring
-[^26]: commands.ts:3340-3378 - updateDependency modifies Cargo.toml to newest crates.io version
-[^27]: cargoTreeProvider.ts:1968-2005 - Dependencies show version comparison tooltip when updates available
-[^28]: commands.ts:140-180 - toggleDependency adds/removes dependencies from build with --features or --no-default-features
-[^29]: commands.ts:152-167 - Production deps affect both dev and release builds
-[^30]: commands.ts:167-180 - Dev dependencies only included in debug builds (skipped in --release)
-[^31]: commands.ts:142 - checkedDependencies Set tracks which dependencies are enabled for current build
-
-[^32]: cargoDiscovery.ts:128-137 - Target type: bin (executable applications)
-[^33]: cargoDiscovery.ts:139-155 - Target type: lib (library crates)
-[^34]: cargoDiscovery.ts:156-178 - Target type: example (code examples in examples/ directory)
-[^35]: cargoDiscovery.ts:179-201 - Target type: test (integration tests in tests/ directory)
-[^36]: cargoDiscovery.ts:202-224 - Target type: bench (benchmarks in benches/ directory)
-[^37]: cargoDiscovery.ts:225-247 - Target type: custom (proc-macro and other special targets)
-[^38]: cargoDiscovery.ts:115-127 - Targets categorized by type with checkbox selection for builds
-[^39]: cargoTreeProvider.ts:1868-1869 - Required targets (main lib/bin) prevent unchecking to ensure valid builds
-[^40]: commands.ts:1584-1750 - classifyUnknownTarget prompts user to select correct target type for unregistered files
-[^41]: cargoTreeProvider.ts:1859-1860 - Invalid targets (wrong location/name) show warning icon with fix suggestion
-[^42]: cargoTreeProvider.ts:1802-1860 - Target validation checks file location matches type (bin in src/bin, examples in examples/, etc.)
-[^43]: cargoTreeProvider.ts:1802, 1820, 1838, 1860 - Yellow (charts.yellow) indicates validation issues with specific reason tooltips
-[^44]: cargoTreeProvider.ts:1865 - Purple (charts.purple) marks required targets that cannot be unchecked
-[^45]: cargoTreeProvider.ts:1540-1545 - Undeclared features (used in code but not in Cargo.toml) are colored red with add-to-manifest command
-
-[^46]: cargoDiscovery.ts:272-304 - discoverCargoFeatures extracts [features] section from Cargo.toml
-[^47]: smartDetection.ts:390 - Undeclared features detected from #[cfg(feature = "name")] attributes in source code
-[^48]: cargoTreeProvider.ts:1540-1545 - viewFeatureUsage command opens file/line where #[cfg(feature)] is used
-[^49]: commands.ts:3141-3148 - addFeature inserts new feature definition in [features] section of Cargo.toml
-[^50]: commands.ts:3016-3064 - toggleFeature adds --features flag to cargo commands for selected features
-[^51]: cargoTreeProvider.ts:989-1007 - Features category icon turns red when undeclared features detected
-
-[^52]: cargoCommands.ts:86-89, 138-141, 228-231 - Release mode adds --release flag to all cargo commands
-[^53]: types.ts:101-108 - Snapshot interface stores build configuration (mode, targets, features, args, env vars)
-[^54]: commands.ts:2129-2142 - Snapshots automatically save/restore complete build state including workspace member selection
-[^55]: rustEdition.ts:38-68 - changeEdition modifies edition field in [package] or [workspace.package] section
-[^56]: rustEdition.ts:10-33 - getCurrentEdition reads edition from Cargo.toml (defaults to 2015 if not specified)
-[^57]: rustEdition.ts:22-27 - Editions: 2015, 2018, 2021, 2024 (parsed from Cargo.toml)
-[^58]: rustEdition.ts:13 - Edition stored in [package] for single crate, [workspace.package] for workspaces
-[^59]: rustEdition.ts:31 - Edition picker shows current edition with confirmation prompt
-
-[^60]: rustup.ts:85-128 - getRustVersion executes `rustc --version` to get active toolchain info
-[^61]: rustup.ts:131-175 - getRustupToolchains executes `rustup toolchain list` to enumerate installed toolchains
-[^62]: cargoDiscovery.ts:10-100 - discoverWorkspaceMembers parses [workspace.members] from root Cargo.toml
-[^63]: cargoTreeProvider.ts:576-615 - Workspace member selection filters targets, features, and dependencies to selected member
-[^64]: cargoTreeProvider.ts:1334-1387 - Workspace members show checkbox for build inclusion, star icon for currently selected member
-[^65]: decorationProvider.ts:17-21, 33-37, 39-43 - Orange (charts.orange) for workspace categories, members, and project header
-
-[^66]: cargoCommands.ts:317-354 - Custom commands execute with current snapshot configuration (mode, targets, features, args, env vars)
-[^67]: cargoCommands.ts:241-278 - Arguments and environment variables applied to all cargo commands
-[^68]: defaultConfig.ts:129-169 - ArgumentCategory groups related CLI arguments for organization
-[^69]: cargoCommands.ts:46-89, 409-430 - Shortcuts work with both binary and library targets; auto-select src/main.rs or src/lib.rs if none checked
-[^70]: package.json:1246 - Cmd+Shift+B (Mac) / Ctrl+Shift+B (Win/Linux) triggers cargo build
-[^71]: package.json:1251 - Cmd+Shift+R (Mac) / Ctrl+Shift+R (Win/Linux) triggers cargo run
-[^72]: package.json:1291 - Cmd+Shift+T (Mac) / Ctrl+Shift+T (Win/Linux) triggers cargo test
-
-[^73]: cargoCommands.ts:46-89 - Build command constructs cargo args from checked targets, features, mode, args, and env vars
-[^74]: cargoCommands.ts:59-68 - Target-specific builds use --bin, --lib, --example, --test, --bench flags
-[^75]: cargoCommands.ts:241-278 - Watch mode executes cargo-watch with specified action (check/build/test/run)
-
-[^76]: cargoTreeProvider.ts:828, 877-878, 897, 921, 949-950, 991-992, 1017, 1045, 1062 - Category names: WORKSPACE MEMBERS, MODULES, DEPENDENCIES, SNAPSHOTS (with active name), Targets (title case), Features (title case), Arguments (title case), Environment Variables (title case), CUSTOM COMMANDS
-[^77]: cargoTreeProvider.ts:1724-1738 - Unknowns folder displays count in label, colored red, contains unregistered target files
-[^78]: defaultConfig.ts:1-247 - Configuration settings auto-initialize in .vscode/settings.json with empty arrays for arguments, environmentVariables, snapshots, and customCommands

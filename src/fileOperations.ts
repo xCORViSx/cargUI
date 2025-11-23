@@ -8,7 +8,7 @@ import { UnregisteredItem } from './types';
  * 
  * @param workspaceFolder - The workspace folder
  * @param item - The unregistered item to move
- * @param memberPath - Optional member path for workspace projects
+ * @param memberPath - Optional member path for workspace packages
  * @returns The new relative path, or null if the move failed or wasn't needed
  */
 export async function moveFileToTargetDirectory(

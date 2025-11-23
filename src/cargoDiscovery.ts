@@ -218,7 +218,8 @@ export function discoverCargoTargets(workspacePath: string, memberPath?: string)
                         targets.push({
                             name: exampleName,
                             type: 'example',
-                            path: examplePath
+                            path: examplePath,
+                            autoDiscovered: true
                         });
                     }
                 }
@@ -265,7 +266,8 @@ export function discoverCargoTargets(workspacePath: string, memberPath?: string)
                         targets.push({
                             name: testName,
                             type: 'test',
-                            path: testPath
+                            path: testPath,
+                            autoDiscovered: true
                         });
                     }
                 }
@@ -312,7 +314,8 @@ export function discoverCargoTargets(workspacePath: string, memberPath?: string)
                         targets.push({
                             name: benchName,
                             type: 'bench',
-                            path: benchPath
+                            path: benchPath,
+                            autoDiscovered: true
                         });
                     }
                 }
@@ -417,7 +420,7 @@ export function discoverCargoDependencies(workspacePath: string, memberPath?: st
                 }
             }
             
-            // If no memberPath provided (single-crate project), parse root dependencies
+            // If no memberPath provided (single-crate package), parse root dependencies
             if (!memberPath) {
                 // Production dependencies
                 if (rootManifest.dependencies) {

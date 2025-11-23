@@ -33,14 +33,12 @@ export class DependencyDecorationProvider implements vscode.FileDecorationProvid
         }
         if (uri.scheme === 'cargui-workspace-category') {
             return {
-                color: new vscode.ThemeColor('charts.orange'),
-                tooltip: 'Workspace Members'
+                color: new vscode.ThemeColor('charts.orange')
             };
         }
         if (uri.scheme === 'cargui-workspace-member-header') {
             return {
-                color: new vscode.ThemeColor('charts.orange'),
-                tooltip: 'Selected Workspace Member'
+                color: new vscode.ThemeColor('charts.orange')
             };
         }
         if (uri.scheme === 'cargui-target' || uri.scheme === 'cargui-rustup' || uri.scheme === 'cargui-module' || uri.scheme === 'cargui-undeclared-module' || uri.scheme === 'cargui-feature') {

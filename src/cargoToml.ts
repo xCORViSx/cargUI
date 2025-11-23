@@ -15,9 +15,17 @@ export async function moveTargetToStandardLocation(
     workspaceFolder: vscode.WorkspaceFolder
 ): Promise<boolean> {
     const workspaceMembers = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
-    const member = memberName 
+    let member = memberName 
         ? workspaceMembers.find(m => m.name === memberName)
         : undefined;
+    
+    // For single-crate packages, memberName might be set but member won't be found
+    // In this case, treat as root package
+    if (memberName && !member && workspaceMembers.length === 0) {
+        console.log(`[moveTargetToStandardLocation] Member ${memberName} not found in workspace members, treating as single-crate package (root)`);
+        member = undefined;
+    }
+    
     const basePath = member 
         ? path.join(workspaceFolder.uri.fsPath, member.path)
         : workspaceFolder.uri.fsPath;
@@ -928,12 +936,15 @@ export async function applyCargoTomlChanges(
                 const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
                 const member = members.find(m => m.name === memberKey);
                 if (!member) {
-                    console.error(`Member ${memberKey} not found`);
-                    errorCount += memberItems.length;
-                    continue;
+                    // If member not found, this might be a single-crate package (not a workspace)
+                    // where memberName was set to the package name. Treat it as root.
+                    console.log(`[applyCargoTomlChanges] Member ${memberKey} not found in workspace, treating as root`);
+                    cargoTomlPath = path.join(workspaceFolder.uri.fsPath, 'Cargo.toml');
+                    memberPath = undefined;
+                } else {
+                    memberPath = member.path;
+                    cargoTomlPath = path.join(workspaceFolder.uri.fsPath, member.path, 'Cargo.toml');
                 }
-                memberPath = member.path;
-                cargoTomlPath = path.join(workspaceFolder.uri.fsPath, member.path, 'Cargo.toml');
             }
 
             const content = fs.readFileSync(cargoTomlPath, 'utf-8');
@@ -955,6 +966,7 @@ export async function applyCargoTomlChanges(
             }
 
             for (const target of processedTargets) {
+                console.log('[applyCargoTomlChanges] Processing target:', JSON.stringify(target, null, 2));
                 if (target.path) {
                     let section = '';
                     let sectionType = '';
@@ -973,10 +985,14 @@ export async function applyCargoTomlChanges(
                         sectionType = '[[bench]]';
                     }
 
+                    console.log('[applyCargoTomlChanges] section:', section, 'sectionType:', sectionType);
+
                     if (section && sectionType) {
                         newContent = insertTargetSection(newContent, section, sectionType);
                         successCount++;
                     }
+                } else {
+                    console.log('[applyCargoTomlChanges] target.path is empty/null');
                 }
             }
 

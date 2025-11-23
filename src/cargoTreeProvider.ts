@@ -28,6 +28,7 @@ import { CargoTreeState } from './cargoCommands';
 import { getCurrentEdition } from './rustEdition';
 import { detectUndeclaredFeatures } from './smartDetection';
 import { showConfigureUnregisteredUI } from './smartDetectionUI';
+import { analyzeTargetFile, calculateTargetHealthColor } from './targetHealth';
 
 /**
  * Main tree data provider for the Cargo sidebar view.
@@ -62,11 +63,11 @@ export class CargoTreeDataProvider implements
     private isWatchMode: boolean = false;
     private watchAction: string = 'check';
     private detectUnregisteredTargetsFunc: (workspacePath: string, memberPath?: string) => UnregisteredItem[];
-    private applyCargoTomlChangesFunc: (workspaceFolder: vscode.WorkspaceFolder, items: UnregisteredItem[]) => Promise<void>;
+    private applyCargoTomlChangesFunc: (workspaceFolder: vscode.WorkspaceFolder, items: UnregisteredItem[], moveFile: (workspaceFolder: vscode.WorkspaceFolder, item: UnregisteredItem, memberPath?: string) => Promise<string | null>) => Promise<void>;
 
     constructor(
         detectUnregisteredTargets: (workspacePath: string, memberPath?: string) => UnregisteredItem[],
-        applyCargoTomlChanges: (workspaceFolder: vscode.WorkspaceFolder, items: UnregisteredItem[]) => Promise<void>
+        applyCargoTomlChanges: (workspaceFolder: vscode.WorkspaceFolder, items: UnregisteredItem[], moveFile: (workspaceFolder: vscode.WorkspaceFolder, item: UnregisteredItem, memberPath?: string) => Promise<string | null>) => Promise<void>
     ) {
         this.detectUnregisteredTargetsFunc = detectUnregisteredTargets;
         this.applyCargoTomlChangesFunc = applyCargoTomlChanges;
@@ -77,11 +78,17 @@ export class CargoTreeDataProvider implements
         this.context = context;
     }
 
+    getWorkspaceFolder(): vscode.WorkspaceFolder | undefined {
+        // Return the stored workspace folder if available, otherwise fallback to first workspace folder
+        return this.workspaceFolder || vscode.workspace.workspaceFolders?.[0];
+    }
+
     // Allow external setting of mode states
     setSelectedWorkspaceMember(member: string | undefined): void {
         console.log('[cargUI] setSelectedWorkspaceMember called with:', member);
         this.selectedWorkspaceMember = member;
         console.log('[cargUI] selectedWorkspaceMember is now:', this.selectedWorkspaceMember);
+        this.refresh();
     }
 
     getSelectedWorkspaceMember(): string | undefined {
@@ -395,9 +402,16 @@ export class CargoTreeDataProvider implements
         }
 
         const workspaceMembers = discoverWorkspaceMembers(this.workspaceFolder.uri.fsPath);
-        const member = item.memberName 
+        let member = item.memberName 
             ? workspaceMembers.find(m => m.name === item.memberName)
             : undefined;
+        
+        // For single-crate packages, memberName might be set but member won't be found
+        if (item.memberName && !member && workspaceMembers.length === 0) {
+            console.log(`[reassignTargetType] Member ${item.memberName} not found, treating as single-crate package (root)`);
+            member = undefined;
+        }
+        
         const basePath = member 
             ? path.join(this.workspaceFolder.uri.fsPath, member.path)
             : this.workspaceFolder.uri.fsPath;
@@ -590,9 +604,16 @@ export class CargoTreeDataProvider implements
         // Move the file if requested
         if (shouldMove) {
             const workspaceMembers = discoverWorkspaceMembers(this.workspaceFolder.uri.fsPath);
-            const member = unknown.memberName 
+            let member = unknown.memberName 
                 ? workspaceMembers.find(m => m.name === unknown.memberName)
                 : undefined;
+            
+            // For single-crate packages, memberName might be set but member won't be found
+            if (unknown.memberName && !member && workspaceMembers.length === 0) {
+                console.log(`[registerUnknownTarget move] Member ${unknown.memberName} not found, treating as single-crate package (root)`);
+                member = undefined;
+            }
+            
             const basePath = member 
                 ? path.join(this.workspaceFolder.uri.fsPath, member.path)
                 : this.workspaceFolder.uri.fsPath;
@@ -658,14 +679,18 @@ export class CargoTreeDataProvider implements
             path: finalPath
         };
 
-        await this.applyCargoTomlChangesFunc(this.workspaceFolder, [itemToRegister]);
+        console.log('[registerUnknownTarget] itemToRegister:', JSON.stringify(itemToRegister, null, 2));
+
+        // We pass a no-op moveFile callback since we've already handled moving the file above
+        const noOpMoveFile = async () => finalPath;
+        await this.applyCargoTomlChangesFunc(this.workspaceFolder, [itemToRegister], noOpMoveFile);
         
         // Refresh the tree to remove the unknown item and show the new target
         this.refresh();
     }
 
-    private getProjectNameAndVersion(workspacePath: string): { name: string; version: string } | null {
-        // We read the project name and version from the root Cargo.toml (ignoring workspace members).
+    private getPackageNameAndVersion(workspacePath: string): { name: string; version: string } | null {
+        // We read the package name and version from the root Cargo.toml (ignoring workspace members).
         const cargoTomlPath = path.join(workspacePath, 'Cargo.toml');
         try {
             const content = fs.readFileSync(cargoTomlPath, 'utf-8');
@@ -708,7 +733,7 @@ export class CargoTreeDataProvider implements
     }
 
     getChildren(element?: CargoTreeItem): Thenable<CargoTreeItem[]> {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const workspaceFolder = this.workspaceFolder;
         if (!workspaceFolder) {
             return Promise.resolve([]);
         }
@@ -717,13 +742,13 @@ export class CargoTreeDataProvider implements
             // Root level - show command categories and targets
             const items: CargoTreeItem[] = [];
 
-            // Project header with name and version
+            // Package header with name and version
             // We show either the root package info or workspace member info
-            let projectInfo = this.getProjectNameAndVersion(workspaceFolder.uri.fsPath);
+            let projectInfo = this.getPackageNameAndVersion(workspaceFolder.uri.fsPath);
             console.log('[cargUI] Building header - selectedWorkspaceMember:', this.selectedWorkspaceMember);
             console.log('[cargUI] projectInfo:', projectInfo);
             
-            // For workspace-only projects (no root package), use workspace name from folder
+            // For workspace-only packages (no root package), use workspace name from folder
             let isWorkspaceOnly = false;
             if (!projectInfo) {
                 const workspaceName = path.basename(workspaceFolder.uri.fsPath);
@@ -731,10 +756,11 @@ export class CargoTreeDataProvider implements
                 isWorkspaceOnly = true;
             }
             
-            // We show the selected workspace member name in the project header if one is selected in multi-crate projects
+            // We show the selected workspace member name in the package header if one is selected in multi-crate packages
             let headerLabel = isWorkspaceOnly ? projectInfo.name : `${projectInfo.name} (v${projectInfo.version})`;
-            let tooltipText = `Project: ${projectInfo.name}\nVersion: ${projectInfo.version}`;
             let headerDescription = '';
+            // Default tooltip for workspace root (overridden if member selected)
+            let tooltipText = `Workspace: ${projectInfo.name}`;
             
             console.log('[cargUI] About to check selectedWorkspaceMember:', this.selectedWorkspaceMember, 'against "all"');
             if (this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all') {
@@ -743,13 +769,13 @@ export class CargoTreeDataProvider implements
                 console.log('[cargUI] Member info result:', memberInfo);
                 if (memberInfo && memberInfo.version && typeof memberInfo.version === 'string') {
                     headerLabel = `${memberInfo.name} (v${memberInfo.version})`;
-                    tooltipText = `Member: ${memberInfo.name}\nProject: ${projectInfo.name}\nVersion: ${memberInfo.version}`;
+                    tooltipText = `Member: ${memberInfo.name}\nPackage: ${projectInfo.name}\nVersion: ${memberInfo.version}`;
                     headerDescription = `📦 ${this.selectedWorkspaceMember}`;
                     console.log('[cargUI] Updated header label to:', headerLabel);
                 } else if (memberInfo) {
                     // If no version or version is invalid, just show the member name
                     headerLabel = memberInfo.name;
-                    tooltipText = `Member: ${memberInfo.name}\nProject: ${projectInfo.name}`;
+                    tooltipText = `Member: ${memberInfo.name}\nPackage: ${projectInfo.name}`;
                     headerDescription = `📦 ${this.selectedWorkspaceMember}`;
                 }
             } else {
@@ -769,7 +795,7 @@ export class CargoTreeDataProvider implements
             const hasMemberSelected = this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all';
             vscode.commands.executeCommand('setContext', 'cargui.hasMemberSelected', hasMemberSelected);
             
-            // we make the project header orange
+            // we make the package header orange
             projectItem.iconPath = new vscode.ThemeIcon('package', new vscode.ThemeColor('charts.orange'));
             
             // we set the workspace member on the item so the command handler knows which member is selected
@@ -795,17 +821,56 @@ export class CargoTreeDataProvider implements
             items.push(projectItem);
 
             // Rust Edition indicator
-            // Always use workspace root for edition (multi-crate workspaces use [workspace.package])
-            const currentEdition = getCurrentEdition(workspaceFolder.uri.fsPath);
-            if (currentEdition) {
+            // Read edition from appropriate Cargo.toml based on selected member
+            let memberEditionInfo;
+            let workspaceEditionInfo = getCurrentEdition(workspaceFolder.uri.fsPath);
+            
+            if (this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all') {
+                // Get the member's edition
+                const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+                const member = members.find(m => m.name === this.selectedWorkspaceMember);
+                if (member) {
+                    const memberPath = path.join(workspaceFolder.uri.fsPath, member.path);
+                    memberEditionInfo = getCurrentEdition(memberPath);
+                }
+            }
+            
+            const editionInfo = memberEditionInfo || workspaceEditionInfo;
+            if (editionInfo) {
+                let displayLabel: string;
+                let displayDescription: string = '';
+                let tooltipText: string;
+                
+                // Use workspace edition from root if available
+                const wsEdition = workspaceEditionInfo?.workspaceEdition;
+                
+                if (wsEdition) {
+                    // Check if a workspace member is selected
+                    if (this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all') {
+                        // Member is selected - show member edition in label, workspace in description
+                        displayLabel = `Edition: ${editionInfo.edition}`;
+                        displayDescription = `WS: ${wsEdition}`;
+                        tooltipText = `Member edition: ${editionInfo.edition}\nWorkspace edition: ${wsEdition}\nClick to change edition`;
+                    } else {
+                        // No member selected (showing workspace root)
+                        displayLabel = `Workspace Edition: ${wsEdition}`;
+                        tooltipText = `Workspace edition: ${wsEdition}\nClick to change edition`;
+                    }
+                } else {
+                    // Single-crate package
+                    displayLabel = `Edition: ${editionInfo.edition}`;
+                    tooltipText = `Rust edition: ${editionInfo.edition}\nClick to change edition`;
+                }
+                
                 const editionItem = new CargoTreeItem(
-                    `Edition: ${currentEdition}`,
+                    displayLabel,
                     vscode.TreeItemCollapsibleState.None,
                     TreeItemContext.RustEdition,
                     { iconName: 'versions' }
                 );
-                editionItem.tooltip = `Rust edition: ${currentEdition}\nClick to change edition`;
-                editionItem.description = '';
+                
+                editionItem.tooltip = tooltipText;
+                editionItem.description = displayDescription;
                 editionItem.command = {
                     command: 'cargui.changeEdition',
                     title: 'Change Rust Edition'
@@ -899,7 +964,7 @@ export class CargoTreeDataProvider implements
             items.push(dependenciesItem);
 
             // Separator before config group
-            const separator1 = new CargoTreeItem('────────────────', vscode.TreeItemCollapsibleState.None, TreeItemContext.Separator);
+            const separator1 = new CargoTreeItem('', vscode.TreeItemCollapsibleState.None, TreeItemContext.Separator);
             separator1.description = '';
             separator1.tooltip = '';
             items.push(separator1);
@@ -1051,7 +1116,7 @@ export class CargoTreeDataProvider implements
             items.push(envVarsItem);
 
             // Separator before commands/deps group
-            const separator2 = new CargoTreeItem('────────────────', vscode.TreeItemCollapsibleState.None, TreeItemContext.Separator);
+            const separator2 = new CargoTreeItem('', vscode.TreeItemCollapsibleState.None, TreeItemContext.Separator);
             separator2.description = '';
             separator2.tooltip = '';
             items.push(separator2);
@@ -1757,6 +1822,13 @@ export class CargoTreeDataProvider implements
                     return { color: 'charts.red', reason: 'Unknown path' }; // Unknown - no path
                 }
 
+                // Check if file exists
+                const memberPath = targetMemberPath ? path.join(workspaceFolder.uri.fsPath, targetMemberPath) : workspaceFolder.uri.fsPath;
+                const fullPath = path.join(memberPath, target.path);
+                if (!fs.existsSync(fullPath)) {
+                    return { color: 'terminal.ansiBrightYellow', reason: '⚠️ File does not exist (but declared in Cargo.toml)' };
+                }
+
                 // Determine standard location based on target type
                 let standardLocations: string[] = [];
                 const filename = path.basename(target.path);
@@ -1775,7 +1847,7 @@ export class CargoTreeDataProvider implements
                     if (normalizedPath === 'src/lib.rs') {
                         return { color: undefined }; // Standard location - no color
                     } else {
-                        return { color: 'charts.blue', reason: 'Custom location (not in standard directory)' }; // Custom location
+                        return { color: 'charts.purple', reason: '🟪 Custom location (not in standard directory)' }; // Custom location
                     }
                 } else if (target.type === 'bin') {
                     if (target.path === 'src/main.rs') {
@@ -1786,11 +1858,20 @@ export class CargoTreeDataProvider implements
                     
                     // Check if bin is in wrong location (e.g., in examples/, tests/, benches/)
                     if (pathDir.startsWith('examples')) {
-                        return { color: 'charts.yellow', reason: 'Binary declared in examples/ directory' };
+                        const wrongDir = 'declared as bin but file located in std directory of examples';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as bin but file located in std directory of examples`;
+                        return { color: 'charts.yellow', reason };
                     } else if (pathDir.startsWith('tests')) {
-                        return { color: 'charts.yellow', reason: 'Binary declared in tests/ directory' };
+                        const wrongDir = 'declared as bin but file located in std directory of tests';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as bin but file located in std directory of tests`;
+                        return { color: 'charts.yellow', reason };
                     } else if (pathDir.startsWith('benches')) {
-                        return { color: 'charts.yellow', reason: 'Binary declared in benches/ directory' };
+                        const wrongDir = 'declared as bin but file located in std directory of benches';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as bin but file located in std directory of benches`;
+                        return { color: 'charts.yellow', reason };
                     }
                 } else if (target.type === 'example') {
                     // Examples can be in examples/ directory (single file or directory with main.rs)
@@ -1798,54 +1879,81 @@ export class CargoTreeDataProvider implements
                     if (pathDir.startsWith('examples')) {
                         // Check if name matches file
                         if (!nameMatchesFile) {
-                            return { color: 'charts.yellow', reason: `Target name "${target.name}" doesn't match filename "${fileStem}"` };
+                            return { color: 'charts.yellow', reason: `INVALID Cargo.toml declaration: Target name "${target.name}" doesn't match filename "${fileStem}"` };
                         }
                         return { color: undefined }; // Standard location - no color
                     }
                     
                     // Check if example is in wrong location
                     if (pathDir.startsWith('src/bin')) {
-                        return { color: 'charts.yellow', reason: 'Example declared in src/bin/ directory' };
+                        const wrongDir = 'declared as example but file located in std directory of bins';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as example but file located in std directory of bins`;
+                        return { color: 'charts.yellow', reason };
                     } else if (pathDir.startsWith('tests')) {
-                        return { color: 'charts.yellow', reason: 'Example declared in tests/ directory' };
+                        const wrongDir = 'declared as example but file located in std directory of tests';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as example but file located in std directory of tests`;
+                        return { color: 'charts.yellow', reason };
                     } else if (pathDir.startsWith('benches')) {
-                        return { color: 'charts.yellow', reason: 'Example declared in benches/ directory' };
+                        const wrongDir = 'declared as example but file located in std directory of benches';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as example but file located in std directory of benches`;
+                        return { color: 'charts.yellow', reason };
                     }
                 } else if (target.type === 'test') {
                     // Tests can be in tests/ directory (single file or directory with main.rs)
                     if (pathDir.startsWith('tests')) {
                         // Check if name matches file
                         if (!nameMatchesFile) {
-                            return { color: 'charts.yellow', reason: `Target name "${target.name}" doesn't match filename "${fileStem}"` };
+                            return { color: 'charts.yellow', reason: `INVALID Cargo.toml declaration: Target name "${target.name}" doesn't match filename "${fileStem}"` };
                         }
                         return { color: undefined }; // Standard location - no color
                     }
                     
                     // Check if test is in wrong location
                     if (pathDir.startsWith('src/bin')) {
-                        return { color: 'charts.yellow', reason: 'Test declared in src/bin/ directory' };
+                        const wrongDir = 'declared as test but file located in std directory of bins';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as test but file located in std directory of bins`;
+                        return { color: 'charts.yellow', reason };
                     } else if (pathDir.startsWith('examples')) {
-                        return { color: 'charts.yellow', reason: 'Test declared in examples/ directory' };
+                        const wrongDir = 'declared as test but file located in std directory of examples';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as test but file located in std directory of examples`;
+                        return { color: 'charts.yellow', reason };
                     } else if (pathDir.startsWith('benches')) {
-                        return { color: 'charts.yellow', reason: 'Test declared in benches/ directory' };
+                        const wrongDir = 'declared as test but file located in std directory of benches';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as test but file located in std directory of benches`;
+                        return { color: 'charts.yellow', reason };
                     }
                 } else if (target.type === 'bench') {
                     // Benches can be in benches/ directory (single file or directory with main.rs)
                     if (pathDir.startsWith('benches')) {
                         // Check if name matches file
                         if (!nameMatchesFile) {
-                            return { color: 'charts.yellow', reason: `Target name "${target.name}" doesn't match filename "${fileStem}"` };
+                            return { color: 'charts.yellow', reason: `INVALID Cargo.toml declaration: Target name "${target.name}" doesn't match filename "${fileStem}"` };
                         }
                         return { color: undefined }; // Standard location - no color
                     }
                     
                     // Check if bench is in wrong location
                     if (pathDir.startsWith('src/bin')) {
-                        return { color: 'charts.yellow', reason: 'Benchmark declared in src/bin/ directory' };
+                        const wrongDir = 'declared as bench but file located in std directory of bins';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as bench but file located in std directory of bins`;
+                        return { color: 'charts.yellow', reason };
                     } else if (pathDir.startsWith('examples')) {
-                        return { color: 'charts.yellow', reason: 'Benchmark declared in examples/ directory' };
+                        const wrongDir = 'declared as bench but file located in std directory of examples';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as bench but file located in std directory of examples`;
+                        return { color: 'charts.yellow', reason };
                     } else if (pathDir.startsWith('tests')) {
-                        return { color: 'charts.yellow', reason: 'Benchmark declared in tests/ directory' };
+                        const wrongDir = 'declared as bench but file located in std directory of tests';
+                        const nameMismatch = `Target name "${target.name}" doesn't match filename "${fileStem}"`;
+                        const reason = !nameMatchesFile ? `INVALID Cargo.toml declaration: ${nameMismatch} AND ${wrongDir}` : `INVALID Cargo.toml declaration: Declared as bench but file located in std directory of tests`;
+                        return { color: 'charts.yellow', reason };
                     }
                 }
 
@@ -1856,12 +1964,12 @@ export class CargoTreeDataProvider implements
                 // Target is correctly declared and in standard location
                 // But check if name matches file
                 if (!nameMatchesFile && target.path !== 'src/main.rs' && target.path !== 'src/lib.rs') {
-                    return { color: 'charts.yellow', reason: `Target name "${target.name}" doesn't match filename "${fileStem}"` };
+                    return { color: 'charts.yellow', reason: `INVALID Cargo.toml declaration: Target name "${target.name}" doesn't match filename "${fileStem}"` };
                 }
                 return { color: undefined }; // No color (default)
             } else {
-                // Target is declared but in custom location (lighter yellow for custom, regardless of name)
-                return { color: 'charts.blue', reason: 'Custom location (not in standard directory)' };
+                // Target is declared but in custom location (purple for custom, regardless of name)
+                return { color: 'charts.purple', reason: '🟪 Custom location (not in standard directory)' };
             }
         };            return Promise.resolve(targets.map(target => {
                 const isMainTarget = target.type === 'bin' && target.path === 'src/main.rs';
@@ -1884,18 +1992,67 @@ export class CargoTreeDataProvider implements
                 const item = new CargoTreeItem(
                     target.name,
                     vscode.TreeItemCollapsibleState.None,
-                    TreeItemContext.Target,
+                    target.autoDiscovered 
+                        ? 'target-autodiscovered'
+                        : (targetStatus.color === 'terminal.ansiBrightYellow' ? 'target-missing'
+                        : (targetStatus.color === 'charts.yellow' ? 'target-yellow' : TreeItemContext.Target)),
                     {
                         iconName: icon,
                         target: target
                     }
                 );
-                item.description = (isMainTarget || isMainLibrary) ? target.path : target.path;
                 
-                // Create tooltip with color coding explanation
+                // We analyze target file for documentation health
+                const memberPath = this.selectedWorkspaceMember && this.selectedWorkspaceMember !== 'all'
+                    ? discoverWorkspaceMembers(workspaceFolder.uri.fsPath).find(m => m.name === this.selectedWorkspaceMember)?.path
+                    : undefined;
+                const basePath = memberPath ? path.join(workspaceFolder.uri.fsPath, memberPath) : workspaceFolder.uri.fsPath;
+                const targetFilePath = path.join(basePath, target.path || '');
+                const { hasHeader, hasIncorrectHeader, totalElements, documentedElements } = analyzeTargetFile(targetFilePath);
+                const healthColor = calculateTargetHealthColor(hasHeader, totalElements, documentedElements);
+                
+                // Calculate health percentage for description
+                let healthPercent = '';
+                if (totalElements > 0) {
+                    const headerItem = 1;
+                    const totalItems = headerItem + totalElements;
+                    const hasHeaderCount = hasHeader ? 1 : 0;
+                    const documentedCount = hasHeaderCount + documentedElements;
+                    healthPercent = ((documentedCount / totalItems) * 100).toFixed(0) + '%';
+                }
+                
+                // Set description to health percentage (or path for main targets)
+                item.description = healthPercent || ((isMainTarget || isMainLibrary) ? target.path : target.path);
+                
+                // Create tooltip with validation warning and health info
                 let tooltipText = target.path || target.name;
+                if (target.autoDiscovered) {
+                    tooltipText += '\n💡 Not declared in Cargo.toml (auto-discovered)';
+                }
                 if (targetStatus.reason) {
-                    tooltipText += '\n⚠️ ' + targetStatus.reason;
+                    // Use warning triangle only for yellow validation issues (name mismatch, wrong location)
+                    // Purple custom location and red unknown path get their own emoji prefix
+                    const prefix = targetStatus.color === 'charts.yellow' ? '⚠️ ' : '';
+                    tooltipText += '\n' + prefix + targetStatus.reason;
+                }
+                // We add health info to tooltip
+                if (totalElements > 0) {
+                    const headerItem = 1;
+                    const totalItems = headerItem + totalElements;
+                    const hasHeaderCount = hasHeader ? 1 : 0;
+                    const documentedCount = hasHeaderCount + documentedElements;
+                    const healthPercent = ((documentedCount / totalItems) * 100).toFixed(0);
+                    tooltipText += `\n📊 Documentation: ${documentedCount}/${totalItems} items (${healthPercent}%)`;
+                    if (!hasHeader) {
+                        if (hasIncorrectHeader) {
+                            tooltipText += '\n- Has /// header (must be //!)';
+                        } else {
+                            tooltipText += '\n- Missing header (//!)';
+                        }
+                    } else {
+                        tooltipText += '\n- 📋 Has file header (//!)';
+                    }
+                    tooltipText += `\n- Elements: ${documentedElements}/${totalElements}`;
                 }
                 item.tooltip = tooltipText;
                 item.target = target;
@@ -1905,17 +2062,38 @@ export class CargoTreeDataProvider implements
                     item.workspaceMember = this.selectedWorkspaceMember;
                 }
                 
-                // Set resourceUri for file decoration (enables text coloring like dependencies)
-                item.resourceUri = vscode.Uri.parse(`cargui-target:${target.name}`);
+                // Set resourceUri for file decoration (enables text coloring for health status)
+                // Use different scheme for yellow validation to enable conditional resolve button
+                // Auto-discovered targets use normal scheme (only icon is affected, not text)
+                const scheme = targetStatus.color === 'charts.yellow' ? 'cargui-target-yellow' : 'cargui-target';
+                item.resourceUri = vscode.Uri.parse(`${scheme}:${target.name}`);
                 
-                // Apply color via decoration provider (or clear it if no issues)
-                if (this.decorationProvider) {
-                    this.decorationProvider.setTargetColor(target.name, targetStatus.color);
+                // Debug log for yellow targets
+                if (targetStatus.color === 'charts.yellow') {
+                    console.log(`[cargUI] Yellow target: ${target.name}, scheme: ${scheme}, resourceUri: ${item.resourceUri.toString()}`);
                 }
                 
-                // Also apply icon color for consistency
-                if (targetStatus.color) {
-                    item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(targetStatus.color));
+                // Apply health color via decoration provider (for text color)
+                if (this.decorationProvider) {
+                    this.decorationProvider.setTargetColor(target.name, healthColor);
+                }
+                
+                // We apply icon color based ONLY on validation status - health colors only affect text
+                // Auto-discovered targets (not declared in Cargo.toml) get bright black/gray icon
+                // Missing file targets get bright yellow icon AND text
+                if (target.autoDiscovered) {
+                    item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor('terminal.ansiBrightBlack'));
+                } else if (targetStatus.color === 'terminal.ansiBrightYellow') {
+                    // Missing file: bright yellow icon
+                    item.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('terminal.ansiBrightYellow'));
+                    // Also set text color to bright yellow via decoration provider
+                    if (this.decorationProvider) {
+                        this.decorationProvider.setTargetColor(target.name, 'terminal.ansiBrightYellow');
+                    }
+                } else if (targetStatus.color) {
+                    // Use warning triangle icon for yellow validation issues
+                    const iconToUse = targetStatus.color === 'charts.yellow' ? 'warning' : icon;
+                    item.iconPath = new vscode.ThemeIcon(iconToUse, new vscode.ThemeColor(targetStatus.color));
                 }
                 
                 // Make targets checkable
@@ -2023,9 +2201,18 @@ export class CargoTreeDataProvider implements
                 
                 // Determine icon - use star for inherited deps, package otherwise
                 let iconName = 'package';
+                let iconColor: vscode.ThemeColor | undefined = undefined;
+                
+                // Workspace dependencies get orange coloring
+                if (depType === 'workspace') {
+                    iconColor = new vscode.ThemeColor('charts.orange');
+                }
+                
                 if (dep.inherited && depType !== 'workspace') {
                     iconName = 'star-full';
                     tooltip += ' (from workspace)';
+                    // Inherited deps (workspace stars) also get orange
+                    iconColor = new vscode.ThemeColor('charts.orange');
                 }
                 
                 const item = new CargoTreeItem(
@@ -2034,6 +2221,12 @@ export class CargoTreeDataProvider implements
                     TreeItemContext.Dependency,
                     { dependency: dep, iconName: iconName }
                 );
+                
+                // Apply orange icon color to workspace dependencies and inherited deps
+                if (iconColor) {
+                    item.iconPath = new vscode.ThemeIcon(iconName, iconColor);
+                }
+                
                 item.description = description;
                 item.tooltip = tooltip;
                 item.isInherited = dep.inherited && depType !== 'workspace';

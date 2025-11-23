@@ -112,9 +112,16 @@ export async function showConfigureUnregisteredUI(
             const item = activeItems[0].item;
             // Only open file for targets with paths (not features)
             if (item.path && item.type !== 'feature') {
-                const basePath = item.memberName 
-                    ? vscode.Uri.joinPath(workspaceFolder.uri, item.memberName)
-                    : workspaceFolder.uri;
+                let basePath = workspaceFolder.uri;
+                if (item.memberName) {
+                    // Look up actual member path from memberName
+                    const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+                    const member = members.find(m => m.name === item.memberName);
+                    if (member) {
+                        basePath = vscode.Uri.joinPath(workspaceFolder.uri, member.path);
+                    }
+                    // For single-crate packages, member won't be found, so basePath stays as root
+                }
                 const fileUri = vscode.Uri.joinPath(basePath, item.path);
                 try {
                     await vscode.window.showTextDocument(fileUri, { preview: true, preserveFocus: true });
@@ -158,9 +165,16 @@ export async function resolveUnknownTargetTypes(
     for (const target of unknownTargets) {
         // Open the file in preview mode before asking for classification
         if (target.path && workspaceFolder) {
-            const basePath = target.memberName 
-                ? vscode.Uri.joinPath(workspaceFolder.uri, target.memberName)
-                : workspaceFolder.uri;
+            let basePath = workspaceFolder.uri;
+            if (target.memberName) {
+                // Look up actual member path from memberName
+                const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+                const member = members.find(m => m.name === target.memberName);
+                if (member) {
+                    basePath = vscode.Uri.joinPath(workspaceFolder.uri, member.path);
+                }
+                // For single-crate packages, member won't be found, so basePath stays as root
+            }
             const fileUri = vscode.Uri.joinPath(basePath, target.path);
             try {
                 await vscode.window.showTextDocument(fileUri, { preview: true, preserveFocus: false });

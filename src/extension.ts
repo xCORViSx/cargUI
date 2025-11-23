@@ -46,6 +46,17 @@ export async function activate(context: vscode.ExtensionContext) {
     cargoTreeProvider.decorationProvider = decorationProvider;
     (vscode.window as any).cargoTreeProvider = cargoTreeProvider;
 
+    // Set context for whether there are multiple workspace folders
+    const hasMultipleFolders = (vscode.workspace.workspaceFolders?.length ?? 0) > 1;
+    vscode.commands.executeCommand('setContext', 'cargui.hasMultipleWorkspaceFolders', hasMultipleFolders);
+
+    // Get the selected workspace folder from storage, or default to first folder
+    let selectedFolderIndex = context.workspaceState.get<number>('cargui.selectedWorkspaceFolder', 0);
+    if (!vscode.workspace.workspaceFolders || selectedFolderIndex >= vscode.workspace.workspaceFolders.length) {
+        selectedFolderIndex = 0;
+    }
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[selectedFolderIndex];
+
     try {
         const treeView = vscode.window.createTreeView('cargoTargets', {
             treeDataProvider: cargoTreeProvider,
@@ -100,8 +111,6 @@ export async function activate(context: vscode.ExtensionContext) {
     };
 
     updateToolchainStatusBar();
-
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 
     if (workspaceFolder) {
         // Initialize default configuration
@@ -214,10 +223,46 @@ export async function activate(context: vscode.ExtensionContext) {
         cargoTreeProvider.refresh();
     };
 
+    const selectWorkspaceFolder = async (index: number) => {
+        if (!vscode.workspace.workspaceFolders || index >= vscode.workspace.workspaceFolders.length) {
+            return;
+        }
+        
+        // Get current folder index before switching
+        const currentIndex = context.workspaceState.get<number>('cargui.selectedWorkspaceFolder', 0);
+        
+        await context.workspaceState.update('cargui.selectedWorkspaceFolder', index);
+        
+        // Update access history - add this index to the front of the history
+        const accessHistory = context.workspaceState.get<number[]>('cargui.workspaceFolderAccessHistory', []);
+        const newHistory = [index, ...accessHistory.filter(i => i !== index)].slice(0, 10); // Keep last 10
+        await context.workspaceState.update('cargui.workspaceFolderAccessHistory', newHistory);
+        
+        // Update the active workspace folder
+        const newFolder = vscode.workspace.workspaceFolders[index];
+        cargoTreeProvider.setWorkspaceContext(newFolder, context);
+        cargoTreeProvider.refresh();
+        
+        // Collapse previous folder and expand new folder in explorer
+        if (currentIndex !== index) {
+            const oldFolder = vscode.workspace.workspaceFolders[currentIndex];
+            if (oldFolder) {
+                // Reveal and collapse old folder
+                await vscode.commands.executeCommand('revealInExplorer', oldFolder.uri);
+                await vscode.commands.executeCommand('list.collapse');
+            }
+            // Reveal new folder and expand it
+            await vscode.commands.executeCommand('revealInExplorer', newFolder.uri);
+            await vscode.commands.executeCommand('list.expand');
+        }
+        
+        vscode.window.showInformationMessage(`Switched to package folder: ${newFolder.name}`);
+    };
+
     const commandDisposables = registerCommands({
         context,
         cargoTreeProvider,
-        workspaceFolder,
+        getWorkspaceFolder: () => cargoTreeProvider.getWorkspaceFolder(),
         getIsReleaseMode,
         setIsReleaseMode,
         getIsWatchMode,
@@ -228,6 +273,7 @@ export async function activate(context: vscode.ExtensionContext) {
         setWatchAction,
         getSelectedWorkspaceMember,
         setSelectedWorkspaceMember,
+        selectWorkspaceFolder,
         updateToolchainStatusBar,
         runSmartDetection,
         showConfigureUnregisteredUI: (workspaceFolder: vscode.WorkspaceFolder) => 

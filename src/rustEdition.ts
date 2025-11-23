@@ -36,9 +36,9 @@ export async function getAvailableEditions(): Promise<string[]> {
 
 /**
  * Reads the current Rust edition from Cargo.toml
- * Checks both [package] and [workspace.package] sections
+ * Returns both member edition and workspace edition (if applicable)
  */
-export function getCurrentEdition(workspacePath: string): string | undefined {
+export function getCurrentEdition(workspacePath: string): { edition: string; workspaceEdition?: string; hasExplicitEdition?: boolean } | undefined {
     const cargoTomlPath = path.join(workspacePath, 'Cargo.toml');
     
     if (!fs.existsSync(cargoTomlPath)) {
@@ -49,20 +49,34 @@ export function getCurrentEdition(workspacePath: string): string | undefined {
         const cargoTomlContent = fs.readFileSync(cargoTomlPath, 'utf-8');
         const parsed = toml.parse(cargoTomlContent);
         
-        // First check [workspace.package] for multi-crate workspaces
+        // Check both workspace and package editions
         const workspacePackageEdition = (parsed.workspace as any)?.package?.edition;
-        if (workspacePackageEdition) {
-            return String(workspacePackageEdition);
-        }
-        
-        // Then check [package] for single-crate projects
         const packageEdition = (parsed.package as any)?.edition;
-        if (packageEdition && typeof packageEdition !== 'object') {
-            return String(packageEdition);
+        
+        let edition: string;
+        let workspaceEdition: string | undefined;
+        let hasExplicitEdition = false;
+        
+        if (workspacePackageEdition) {
+            workspaceEdition = String(workspacePackageEdition);
+            // If package also has edition, use it; otherwise inherit workspace
+            if (packageEdition && typeof packageEdition !== 'object') {
+                edition = String(packageEdition);
+                hasExplicitEdition = true;
+            } else {
+                edition = String(workspacePackageEdition);
+                hasExplicitEdition = false;
+            }
+        } else if (packageEdition && typeof packageEdition !== 'object') {
+            edition = String(packageEdition);
+            hasExplicitEdition = true;
+        } else {
+            // Default to 2015 if not specified
+            edition = '2015';
+            hasExplicitEdition = false;
         }
         
-        // Default to 2015 if not specified
-        return '2015';
+        return { edition, workspaceEdition, hasExplicitEdition };
     } catch (error) {
         console.error('Error reading Cargo.toml for edition:', error);
         return undefined;
@@ -73,7 +87,7 @@ export function getCurrentEdition(workspacePath: string): string | undefined {
  * Updates the Rust edition in Cargo.toml
  * Handles both [package] and [workspace.package] sections
  */
-export async function updateEdition(workspacePath: string, newEdition: string): Promise<boolean> {
+export async function updateEdition(workspacePath: string, newEdition: string, updateWorkspace: boolean = true): Promise<boolean> {
     const cargoTomlPath = path.join(workspacePath, 'Cargo.toml');
     
     if (!fs.existsSync(cargoTomlPath)) {
@@ -89,25 +103,41 @@ export async function updateEdition(workspacePath: string, newEdition: string): 
         const hasWorkspacePackage = (parsed.workspace as any)?.package;
         
         if (hasWorkspacePackage) {
-            // Update [workspace.package] section
-            // Look for edition under [workspace.package]
-            const workspacePackageRegex = /(\[workspace\.package\][^\[]*)edition\s*=\s*["']?\d{4}["']?/;
-            
-            if (workspacePackageRegex.test(cargoTomlContent)) {
-                // Replace existing edition in [workspace.package]
-                cargoTomlContent = cargoTomlContent.replace(
-                    /(\[workspace\.package\][^\[]*)edition\s*=\s*["']?\d{4}["']?/,
-                    `$1edition = "${newEdition}"`
-                );
+            if (updateWorkspace) {
+                // Update [workspace.package] section
+                const workspacePackageRegex = /(\[workspace\.package\][^\[]*)edition\s*=\s*["']?\d{4}["']?/;
+                
+                if (workspacePackageRegex.test(cargoTomlContent)) {
+                    // Replace existing edition in [workspace.package]
+                    cargoTomlContent = cargoTomlContent.replace(
+                        /(\[workspace\.package\][^\[]*)edition\s*=\s*["']?\d{4}["']?/,
+                        `$1edition = "${newEdition}"`
+                    );
+                } else {
+                    // Add edition to [workspace.package]
+                    cargoTomlContent = cargoTomlContent.replace(
+                        /(\[workspace\.package\][^\[]*)/,
+                        `$1edition = "${newEdition}"\n`
+                    );
+                }
             } else {
-                // Add edition to [workspace.package]
-                cargoTomlContent = cargoTomlContent.replace(
-                    /(\[workspace\.package\][^\[]*)/,
-                    `$1edition = "${newEdition}"\n`
-                );
+                // Update member-specific [package] section
+                const editionRegex = /^(\s*edition\s*=\s*)(["']?\d{4}["']?)/m;
+                
+                if (editionRegex.test(cargoTomlContent)) {
+                    // Replace existing edition in [package]
+                    cargoTomlContent = cargoTomlContent.replace(editionRegex, `$1"${newEdition}"`);
+                } else {
+                    // Add edition to [package] section
+                    const packageSectionRegex = /(\[package\][^\[]*)/;
+                    cargoTomlContent = cargoTomlContent.replace(
+                        packageSectionRegex,
+                        `$1edition = "${newEdition}"\n`
+                    );
+                }
             }
         } else if (parsed.package) {
-            // Single-crate project - update [package] section
+            // Single-crate package - update [package] section
             const editionRegex = /^(\s*edition\s*=\s*)(["']?\d{4}["']?)/m;
             
             if (editionRegex.test(cargoTomlContent)) {
@@ -138,17 +168,17 @@ export async function updateEdition(workspacePath: string, newEdition: string): 
 /**
  * Shows a quick pick menu to select a Rust edition
  */
-export async function selectEdition(workspacePath: string, currentEdition: string): Promise<string | undefined> {
+export async function selectEdition(workspacePath: string, currentEditionStr: string): Promise<string | undefined> {
     const availableEditions = await getAvailableEditions();
     
     const items = availableEditions.map(edition => ({
         label: edition,
-        description: edition === currentEdition ? '✓ current' : '',
+        description: edition === currentEditionStr ? '✓ current' : '',
         edition: edition
     }));
     
     const selected = await vscode.window.showQuickPick(items, {
-        placeHolder: `Select Rust edition (current: ${currentEdition})`
+        placeHolder: `Select Rust edition (current: ${currentEditionStr})`
     });
     
     return selected?.edition;

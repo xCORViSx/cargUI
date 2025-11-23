@@ -109,6 +109,8 @@ export function findModuleFile(basePath: string, moduleName: string, isDeclared:
 function analyzeModuleFile(filePath: string, content?: string): {
     hasDocComment: boolean;
     hasTests: boolean;
+    hasHeader: boolean;
+    hasIncorrectHeader: boolean;
     totalElements: number;
     documentedElements: number;
 } {
@@ -117,13 +119,35 @@ function analyzeModuleFile(filePath: string, content?: string): {
     // Check for doc comments (//! or ///)
     const hasDocComment = /^\/\/[/!]/.test(fileContent);
     
+    // Check for module-level header doc comments (//!) at the start of the file
+    // Also detect incorrect headers (/// at file start instead of //!)
+    const lines = fileContent.split('\n');
+    let hasHeader = false;
+    let hasIncorrectHeader = false;
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('//!')) {
+            hasHeader = true;
+            break;
+        }
+        // Detect incorrect header: /// at file start (should be //!)
+        if (trimmed.startsWith('///')) {
+            hasIncorrectHeader = true;
+            break;
+        }
+        // Stop checking if we hit actual code (not comments or whitespace)
+        if (trimmed && !trimmed.startsWith('//') && !trimmed.startsWith('#[')) {
+            break;
+        }
+    }
+    
     // Check for tests
     const hasTests = /#\[test\]|#\[cfg\(test\)\]/.test(fileContent);
     
     // Parse code elements and count documentation
     const { totalElements, documentedElements } = parseCodeElements(fileContent);
     
-    return { hasDocComment, hasTests, totalElements, documentedElements };
+    return { hasDocComment, hasTests, hasHeader, hasIncorrectHeader, totalElements, documentedElements };
 }
 
 /**
@@ -302,27 +326,34 @@ export function findUndeclaredModules(basePath: string, declaredModules: Set<str
 
 /**
  * Calculates the health status of a module based on documentation percentage.
- * Health is determined by counting code elements (structs, functions, enums, etc.)
- * and checking what percentage have doc comments.
+ * Health is determined by:
+ * 1. Whether the module has a header (//! doc comment) - counts as 1 item
+ * 2. Code elements (structs, functions, enums, etc.) with doc comments (///)
  * 
- * The health scale (privateness has no bearing on health):
+ * The health scale:
  * - 0-50%: No color (underdocumented)
  * - 50-90%: Blue (moderately documented)
  * - 90-100%: Green (well documented)
  * 
- * For modules with no code elements, no color is assigned.
+ * For modules with no header and no code elements, no color is assigned.
  * 
  * @param moduleInfo - Module to analyze
- * @returns Object with health percentage and appropriate color, or undefined if no elements or underdoc
+ * @returns Object with health percentage and appropriate color, or undefined if no items or underdoc
  */
 function calculateModuleHealth(moduleInfo: ModuleInfo): { percentage: number; color: string } | undefined {
-    // Skip if module has no code elements to evaluate
-    if (!moduleInfo.totalElements || moduleInfo.totalElements === 0) {
+    // Calculate total items: 1 for header + code elements
+    const headerItem = 1;
+    const totalItems = headerItem + (moduleInfo.totalElements || 0);
+    
+    // Skip if module has nothing to document
+    if (totalItems === 0) {
         return undefined;
     }
     
-    const documentedCount = moduleInfo.documentedElements || 0;
-    const percentage = (documentedCount / moduleInfo.totalElements) * 100;
+    // Calculate documented items: header (if present) + documented elements
+    const hasHeader = moduleInfo.hasHeader ? 1 : 0;
+    const documentedCount = hasHeader + (moduleInfo.documentedElements || 0);
+    const percentage = (documentedCount / totalItems) * 100;
     
     let color: string | undefined;
     if (percentage < 50) {
@@ -378,18 +409,33 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
         if (!mod.isPublic) {
             tooltipParts.push('🔒 Private module');
         }
-        if (mod.hasDocComment) {
-            tooltipParts.push('📝 Has module documentation');
+        if (mod.hasHeader) {
+            tooltipParts.push('📋 Has module header (//!)');
+        } else if (mod.hasIncorrectHeader) {
+            tooltipParts.push('⚠️ Has /// header (should be //!)');
         }
         if (mod.hasTests) {
             tooltipParts.push('✅ Contains tests');
         }
         
         // Add health information
-        if (mod.totalElements && mod.totalElements > 0) {
-            const documentedCount = mod.documentedElements || 0;
-            const healthPercent = ((documentedCount / mod.totalElements) * 100).toFixed(0);
-            tooltipParts.push(`📊 Documentation: ${documentedCount}/${mod.totalElements} elements (${healthPercent}%)`);
+        const headerItem = 1;
+        const totalItems = headerItem + (mod.totalElements || 0);
+        if (totalItems > 0) {
+            const hasHeader = mod.hasHeader ? 1 : 0;
+            const documentedCount = hasHeader + (mod.documentedElements || 0);
+            const healthPercent = ((documentedCount / totalItems) * 100).toFixed(0);
+            tooltipParts.push(`📊 Documentation: ${documentedCount}/${totalItems} items (${healthPercent}%)`);
+            if (!mod.hasHeader) {
+                if (mod.hasIncorrectHeader) {
+                    tooltipParts.push('   - Has /// header (must be //!)');
+                } else {
+                    tooltipParts.push('   - Missing header (//!)');
+                }
+            }
+            if (mod.totalElements && mod.totalElements > 0) {
+                tooltipParts.push(`   - Elements: ${mod.documentedElements || 0}/${mod.totalElements}`);
+            }
         }
         
         item.tooltip = tooltipParts.join('\n');
@@ -404,9 +450,6 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
             descParts.push(`${childCount}`);
         }
         
-        if (mod.isDirectory) {
-            descParts.push('(dir)');
-        }
         if (!mod.isPublic) {
             descParts.push('(priv)');
         }

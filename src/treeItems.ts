@@ -22,7 +22,7 @@ export interface CargoTreeItemOptions {
 }
 
 /**
- * Custom TreeItem for representing Cargo project elements in the tree view.
+ * Custom TreeItem for representing Cargo package elements in the tree view.
  * Extends VS Code's TreeItem with typed properties for different cargo contexts.
  */
 export class CargoTreeItem extends vscode.TreeItem {

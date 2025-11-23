@@ -56,6 +56,7 @@ export interface CargoTarget {
     path?: string;
     requiredFeatures?: string[];
     workspaceMember?: string;
+    autoDiscovered?: boolean; // True if found via filesystem scan, not declared in Cargo.toml
 }
 
 export interface CargoManifest {
@@ -145,6 +146,8 @@ export interface ModuleInfo {
     isDeclared: boolean;
     isPublic?: boolean;          // Whether module is declared with 'pub mod'
     hasDocComment?: boolean;     // Whether module file has doc comments
+    hasHeader?: boolean;         // Whether module has header doc comment (//!)
+    hasIncorrectHeader?: boolean; // Whether module has /// at start instead of //!
     hasTests?: boolean;          // Whether module contains #[test] or #[cfg(test)]
     totalElements?: number;      // Total count of code elements (structs, functions, enums, traits, etc.)
     documentedElements?: number; // Count of code elements with doc comments

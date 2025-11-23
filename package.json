@@ -1,8 +1,8 @@
 {
   "name": "cargUI",
   "displayName": "cargUI",
-  "description": "Native VSCode UI for Rust projects!",
-  "version": "1.1.5",
+  "description": "Native VSCode UI for Rust packages!",
+  "version": "1.3.3",
   "publisher": "xCORViSx",
   "icon": "cargui-icon.png",
   "repository": {
@@ -269,13 +269,13 @@
     "commands": [
       {
         "command": "cargui.new",
-        "title": "New Project",
+        "title": "New Package",
         "category": "cargUI",
         "icon": "$(new-file)"
       },
       {
         "command": "cargui.newGlobal",
-        "title": "Cargo: New Project",
+        "title": "Cargo: New Package",
         "category": "cargUI",
         "icon": "$(new-file)"
       },
@@ -359,7 +359,7 @@
       },
       {
         "command": "cargui.viewInCargoToml",
-        "title": "View in Cargo.toml",
+        "title": "View Cargo.toml",
         "category": "cargUI",
         "icon": "$(go-to-file)"
       },
@@ -380,6 +380,24 @@
         "title": "View Target File",
         "category": "cargUI",
         "icon": "$(file-code)"
+      },
+      {
+        "command": "cargui.resolveTargetValidation",
+        "title": "Resolve Invalidation",
+        "category": "cargUI",
+        "icon": "$(wrench)"
+      },
+      {
+        "command": "cargui.declareAutoDiscoveredTarget",
+        "title": "Declare in Cargo.toml",
+        "category": "cargUI",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cargui.resolveMissingTargetFile",
+        "title": "Resolve Missing File",
+        "category": "cargUI",
+        "icon": "$(wrench)"
       },
       {
         "command": "cargui.toggleAllFeatures",
@@ -495,6 +513,12 @@
         "icon": "$(go-to-file)"
       },
       {
+        "command": "cargui.viewCargoToml",
+        "title": "View Cargo.toml",
+        "category": "cargUI",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "cargui.removeFeature",
         "title": "Remove Feature",
         "category": "cargUI",
@@ -529,6 +553,24 @@
         "title": "Declare All Undeclared Modules",
         "category": "cargUI",
         "icon": "$(add)"
+      },
+      {
+        "command": "cargui.toggleModuleVisibility",
+        "title": "Toggle Module Visibility",
+        "category": "cargUI",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "cargui.improveModuleDocumentation",
+        "title": "Improve Documentation",
+        "category": "cargUI",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "cargui.improveTargetDocumentation",
+        "title": "Improve Documentation",
+        "category": "cargUI",
+        "icon": "$(sparkle)"
       },
       {
         "command": "cargui.removeEnvironmentVariable",
@@ -613,6 +655,12 @@
         "title": "Show Keybindings",
         "category": "cargUI",
         "icon": "$(keyboard)"
+      },
+      {
+        "command": "cargui.selectWorkspaceFolder",
+        "title": "Select Package Folder",
+        "category": "cargUI",
+        "icon": "$(folder)"
       },
       {
         "command": "cargui.registerAllUnknownTargets",
@@ -705,6 +753,12 @@
         "icon": "$(go-to-file)"
       },
       {
+        "command": "cargui.viewDependencySectionInCargoToml",
+        "title": "View in Cargo.toml",
+        "category": "cargUI",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "cargui.updateSelectedDependencies",
         "title": "Change Version",
         "category": "cargUI",
@@ -760,7 +814,7 @@
       },
       {
         "command": "cargui.viewInMainTarget",
-        "title": "View main target",
+        "title": "View declaration",
         "category": "cargUI",
         "icon": "$(go-to-file)"
       },
@@ -861,13 +915,8 @@
       "view/item/context": [
         {
           "command": "cargui.viewInCargoToml",
-          "when": "view == cargoTargets && viewItem == target",
+          "when": "view == cargoTargets && viewItem =~ /^target/",
           "group": "navigation@1"
-        },
-        {
-          "command": "cargui.moveTargetToStandardLocation",
-          "when": "view == cargoTargets && viewItem == target",
-          "group": "1_file@1"
         },
         {
           "command": "cargui.toggleAllFeatures",
@@ -1045,6 +1094,16 @@
           "group": "inline@3"
         },
         {
+          "command": "cargui.viewDependencySectionInCargoToml",
+          "when": "view == cargoTargets && viewItem =~ /dependencyTypeFolder/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cargui.viewDependencySectionInCargoToml",
+          "when": "view == cargoTargets && viewItem =~ /dependencyTypeFolder/",
+          "group": "navigation@1"
+        },
+        {
           "command": "cargui.addProductionDependency",
           "when": "view == cargoTargets && viewItem == dependencyTypeFolder-production",
           "group": "inline@4"
@@ -1135,7 +1194,7 @@
           "group": "1_view@1"
         },
         {
-          "command": "cargui.viewFeatureInCargoToml",
+          "command": "cargui.viewCargoToml",
           "when": "view == cargoTargets && viewItem == undeclaredFeature",
           "group": "1_view@1"
         },
@@ -1168,6 +1227,36 @@
           "command": "cargui.declareModule",
           "when": "view == cargoTargets && viewItem == undeclaredModule",
           "group": "2_edit@1"
+        },
+        {
+          "command": "cargui.toggleModuleVisibility",
+          "when": "view == cargoTargets && viewItem == module",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.improveModuleDocumentation",
+          "when": "view == cargoTargets && viewItem == module",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.improveTargetDocumentation",
+          "when": "view == cargoTargets && viewItem =~ /^target/",
+          "group": "inline"
+        },
+        {
+          "command": "cargui.resolveTargetValidation",
+          "when": "view == cargoTargets && viewItem == target-yellow",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargui.declareAutoDiscoveredTarget",
+          "when": "view == cargoTargets && viewItem == target-autodiscovered",
+          "group": "inline@1"
+        },
+        {
+          "command": "cargui.resolveMissingTargetFile",
+          "when": "view == cargoTargets && viewItem == target-missing",
+          "group": "inline@1"
         },
         {
           "command": "cargui.declareAllUndeclaredModules",
@@ -1268,6 +1357,11 @@
           "command": "cargui.openProjectCargoToml",
           "when": "view == cargoTargets && viewItem == projectHeader && cargui.hasMemberSelected",
           "group": "navigation@3"
+        },
+        {
+          "command": "cargui.selectWorkspaceFolder",
+          "when": "view == cargoTargets && viewItem == projectHeader && cargui.hasMultipleWorkspaceFolders",
+          "group": "inline@1"
         }
       ]
     },

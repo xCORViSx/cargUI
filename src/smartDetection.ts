@@ -6,7 +6,7 @@ import { detectModules } from './moduleDetection';
 
 /**
  * Detects unregistered .rs files that are not declared in Cargo.toml
- * but exist in the project structure.
+ * but exist in the package structure.
  */
 export function detectUnregisteredTargets(workspacePath: string, memberPath?: string): UnregisteredItem[] {
     const unregistered: UnregisteredItem[] = [];
@@ -144,26 +144,12 @@ export function detectUnregisteredTargets(workspacePath: string, memberPath?: st
             for (const item of items) {
                 if (item.isFile() && item.name.endsWith('.rs')) {
                     const relPath = `examples/${item.name}`;
-                    if (!registeredPaths.has(relPath)) {
-                        const fileName = item.name.replace('.rs', '').replace(/_/g, '-');
-                        unregistered.push({
-                            name: fileName,
-                            type: 'example',
-                            path: relPath,
-                            memberName: manifest.package?.name
-                        });
-                    }
+                    // Skip files in examples/ - Cargo auto-discovers them, they're not truly "unknown"
+                    // They will show up in the Examples category via auto-discovery
                 } else if (item.isDirectory()) {
                     const mainPath = path.join(examplesDir, item.name, 'main.rs');
                     const relPath = `examples/${item.name}/main.rs`;
-                    if (fs.existsSync(mainPath) && !registeredPaths.has(relPath)) {
-                        unregistered.push({
-                            name: item.name,
-                            type: 'example',
-                            path: relPath,
-                            memberName: manifest.package?.name
-                        });
-                    }
+                    // Skip directory-based examples - Cargo auto-discovers them too
                 }
             }
         }
@@ -175,26 +161,11 @@ export function detectUnregisteredTargets(workspacePath: string, memberPath?: st
             for (const item of items) {
                 if (item.isFile() && item.name.endsWith('.rs')) {
                     const relPath = `tests/${item.name}`;
-                    if (!registeredPaths.has(relPath)) {
-                        const fileName = item.name.replace('.rs', '').replace(/_/g, '-');
-                        unregistered.push({
-                            name: fileName,
-                            type: 'test',
-                            path: relPath,
-                            memberName: manifest.package?.name
-                        });
-                    }
+                    // Skip files in tests/ - Cargo auto-discovers them
                 } else if (item.isDirectory()) {
                     const mainPath = path.join(testsDir, item.name, 'main.rs');
                     const relPath = `tests/${item.name}/main.rs`;
-                    if (fs.existsSync(mainPath) && !registeredPaths.has(relPath)) {
-                        unregistered.push({
-                            name: item.name,
-                            type: 'test',
-                            path: relPath,
-                            memberName: manifest.package?.name
-                        });
-                    }
+                    // Skip directory-based tests - Cargo auto-discovers them too
                 }
             }
         }
@@ -206,26 +177,11 @@ export function detectUnregisteredTargets(workspacePath: string, memberPath?: st
             for (const item of items) {
                 if (item.isFile() && item.name.endsWith('.rs')) {
                     const relPath = `benches/${item.name}`;
-                    if (!registeredPaths.has(relPath)) {
-                        const fileName = item.name.replace('.rs', '').replace(/_/g, '-');
-                        unregistered.push({
-                            name: fileName,
-                            type: 'bench',
-                            path: relPath,
-                            memberName: manifest.package?.name
-                        });
-                    }
+                    // Skip files in benches/ - Cargo auto-discovers them
                 } else if (item.isDirectory()) {
                     const mainPath = path.join(benchesDir, item.name, 'main.rs');
                     const relPath = `benches/${item.name}/main.rs`;
-                    if (fs.existsSync(mainPath) && !registeredPaths.has(relPath)) {
-                        unregistered.push({
-                            name: item.name,
-                            type: 'bench',
-                            path: relPath,
-                            memberName: manifest.package?.name
-                        });
-                    }
+                    // Skip directory-based benchmarks - Cargo auto-discovers them too
                 }
             }
         }

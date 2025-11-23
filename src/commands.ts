@@ -2,6 +2,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as toml from '@iarna/toml';
 
 import { CargoTreeDataProvider } from './cargoTreeProvider';
 import { CargoTreeItem } from './treeItems';
@@ -12,6 +13,7 @@ import {
 	Snapshot,
 	Dependency,
 	CargoTarget,
+	CargoManifest,
 	UnregisteredItem,
 	DetectionResult,
 	ModuleInfo
@@ -50,7 +52,7 @@ import {
 export interface CommandDependencies {
 	context: vscode.ExtensionContext;
 	cargoTreeProvider: CargoTreeDataProvider;
-	workspaceFolder: vscode.WorkspaceFolder | undefined;
+	getWorkspaceFolder(): vscode.WorkspaceFolder | undefined;
 	getIsReleaseMode(): boolean;
 	setIsReleaseMode(value: boolean): void;
 	getIsWatchMode(): boolean;
@@ -61,6 +63,7 @@ export interface CommandDependencies {
 	setWatchAction(action: string): void;
 	getSelectedWorkspaceMember(): string | undefined;
 	setSelectedWorkspaceMember(member: string | undefined): void;
+	selectWorkspaceFolder(index: number): Promise<void>;
 	updateToolchainStatusBar(): Promise<void>;
 	runSmartDetection(workspaceFolder: vscode.WorkspaceFolder): Promise<DetectionResult>;
 	showConfigureUnregisteredUI(workspaceFolder: vscode.WorkspaceFolder): Promise<void>;
@@ -121,7 +124,6 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	const {
 		context,
 		cargoTreeProvider,
-		workspaceFolder,
 		updateToolchainStatusBar,
 		runSmartDetection,
 		showConfigureUnregisteredUI,
@@ -751,6 +753,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.toggleAllFeatures', () => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder) {
 			return;
 		}
@@ -765,6 +768,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.toggleAllTargets', () => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder) {
 			return;
 		}
@@ -781,6 +785,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.toggleAllWorkspaceMembers', () => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder) {
 			return;
 		}
@@ -791,6 +796,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.toggleAllDependencies', () => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder) {
 			return;
 		}
@@ -811,6 +817,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.toggleDependencyType', (item: CargoTreeItem) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder || !item.categoryName) {
 			return;
 		}
@@ -820,29 +827,30 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			: undefined;
 		const dependencies = discoverCargoDependencies(workspaceFolder.uri.fsPath, dependencyMemberPath);
 
-		let deps: Dependency[] = [];
+		let categoryDeps: Dependency[] = [];
 		switch (item.categoryName) {
 			case 'production':
-				deps = dependencies.production;
+				categoryDeps = dependencies.production;
 				break;
 			case 'dev':
-				deps = dependencies.dev;
+				categoryDeps = dependencies.dev;
 				break;
 			case 'build':
-				deps = dependencies.build;
+				categoryDeps = dependencies.build;
 				break;
 			case 'workspace':
-				deps = dependencies.workspace;
+				categoryDeps = dependencies.workspace;
 				break;
 		}
 
 		const checkedDeps = cargoTreeProvider.getCheckedDependencies();
-		const checkedInCategory = deps.filter(dep => checkedDeps.has(dep.name)).length;
-		const shouldCheckAll = checkedInCategory < deps.length;
-		deps.forEach(dep => cargoTreeProvider.setDependencyChecked(dep.name, shouldCheckAll, dep));
+		const checkedInCategory = categoryDeps.filter(dep => checkedDeps.has(dep.name)).length;
+		const shouldCheckAll = checkedInCategory < categoryDeps.length;
+		categoryDeps.forEach(dep => cargoTreeProvider.setDependencyChecked(dep.name, shouldCheckAll, dep));
 	});
 
 	register('cargui.selectWorkspaceMember', (memberName: string) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder) {
 			return;
 		}
@@ -866,21 +874,63 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		cargoTreeProvider.refresh();
 	});
 
+	register('cargui.selectWorkspaceFolder', async () => {
+		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length <= 1) {
+			return;
+		}
+
+		// Get access history
+		const accessHistory = context.workspaceState.get<number[]>('cargui.workspaceFolderAccessHistory', []);
+		const currentIndex = context.workspaceState.get<number>('cargui.selectedWorkspaceFolder', 0);
+
+		// Sort folders by access history
+		const sortedFolders = vscode.workspace.workspaceFolders
+			.map((folder, index) => ({ folder, index }))
+			.sort((a, b) => {
+				// Current folder always last
+				if (a.index === currentIndex) return 1;
+				if (b.index === currentIndex) return -1;
+				
+				// Otherwise sort by access history
+				const aHistory = accessHistory.indexOf(a.index);
+				const bHistory = accessHistory.indexOf(b.index);
+				if (aHistory === -1 && bHistory === -1) return 0;
+				if (aHistory === -1) return 1;
+				if (bHistory === -1) return -1;
+				return aHistory - bHistory;
+			});
+
+		const items = sortedFolders.map(({ folder, index }) => ({
+			label: folder.name,
+			description: index === currentIndex ? '$(check) current' : '',
+			index: index
+		}));
+
+		const selected = await vscode.window.showQuickPick(items, {
+			placeHolder: 'Select package folder to view'
+		});
+
+		if (selected) {
+			await deps.selectWorkspaceFolder(selected.index);
+		}
+	});
+
 	register('cargui.toggleWorkspaceMember', (memberName: string) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder) {
 			return;
 		}
 
 		// If clicking the same member that's already selected, deselect it
 		if (state.selectedWorkspaceMember === memberName) {
-			deps.setSelectedWorkspaceMember(undefined);
+			state.selectedWorkspaceMember = undefined;
 			vscode.window.showInformationMessage(`Deselected workspace member: ${memberName}`);
 		} else {
 			// Otherwise select the new member
 			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
 			const member = members.find(m => m.name === memberName);
 			if (member) {
-				deps.setSelectedWorkspaceMember(memberName);
+				state.selectedWorkspaceMember = memberName;
 				vscode.window.showInformationMessage(`Selected workspace member: ${memberName}`);
 			}
 		}
@@ -899,6 +949,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.viewInCargoToml', async (target: CargoTreeItem) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!target || !target.target || !workspaceFolder) {
 			return;
 		}
@@ -930,6 +981,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.viewBinaryTarget', async (target: CargoTreeItem) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!target || !target.target || !workspaceFolder) {
 			return;
 		}
@@ -970,6 +1022,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.viewMemberCargoToml', async (item: CargoTreeItem) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!item || !item.workspaceMember || !workspaceFolder) {
 			return;
 		}
@@ -993,7 +1046,315 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 	});
 
+	register('cargui.resolveTargetValidation', async (item: CargoTreeItem) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
+		if (!workspaceFolder || !item?.target) {
+			return;
+		}
+
+		const target = item.target;
+		
+		// Determine what validation issues exist
+		if (!target.path) {
+			vscode.window.showErrorMessage('Target has no path specified');
+			return;
+		}
+
+		// Parse path to determine directory and filename
+		const normalizedPath = target.path.replace(/\\/g, '/');
+		const pathParts = normalizedPath.split('/');
+		const filename = pathParts[pathParts.length - 1];
+		const fileStem = filename.replace(/\.rs$/, '').replace(/-/g, '_');
+		const pathDir = pathParts.slice(0, -1).join('/');
+		const normalizedName = target.name.replace(/-/g, '_');
+		const normalizedFileStem = fileStem.replace(/-/g, '_');
+		
+		const nameMatchesFile = normalizedName === normalizedFileStem || target.name === 'main' || target.name === 'lib';
+		
+		// Check what the issue is: wrong directory or name mismatch (or both)
+		let isWrongDirectory = false;
+		let hasNameMismatch = !nameMatchesFile && target.path !== 'src/main.rs' && target.path !== 'src/lib.rs';
+		
+		// Determine if directory is wrong
+		if (target.type === 'bin' && target.path !== 'src/main.rs') {
+			isWrongDirectory = pathDir !== 'src/bin';
+		} else if (target.type === 'example') {
+			isWrongDirectory = !pathDir.startsWith('examples');
+		} else if (target.type === 'test') {
+			isWrongDirectory = !pathDir.startsWith('tests');
+		} else if (target.type === 'bench') {
+			isWrongDirectory = !pathDir.startsWith('benches');
+		}
+		
+		// Fix both issues if present
+		let actions: string[] = [];
+		
+		if (isWrongDirectory) {
+			// Move to standard location
+			const success = await moveTargetToStandardLocation(target, item.workspaceMember, workspaceFolder);
+			if (success) {
+				actions.push('moved to standard location');
+			}
+		}
+		
+		if (hasNameMismatch) {
+			// Fix name in Cargo.toml to match filename
+			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+			const member = item.workspaceMember 
+				? members.find(m => m.name === item.workspaceMember)
+				: undefined;
+			
+			const basePath = member 
+				? path.join(workspaceFolder.uri.fsPath, member.path)
+				: workspaceFolder.uri.fsPath;
+			
+			const cargoTomlPath = path.join(basePath, 'Cargo.toml');
+			
+			if (!fs.existsSync(cargoTomlPath)) {
+				vscode.window.showErrorMessage('Cargo.toml not found');
+				return;
+			}
+			
+			try {
+				const content = fs.readFileSync(cargoTomlPath, 'utf-8');
+				const manifest = toml.parse(content) as CargoManifest;
+				
+				// Find and update the target name
+				const sectionKey = target.type === 'lib' ? 'lib' : target.type as 'bin' | 'example' | 'test' | 'bench';
+				
+				if (target.type === 'lib' && manifest.lib) {
+					manifest.lib.name = fileStem;
+				} else {
+					const section = manifest[sectionKey as keyof CargoManifest] as any[];
+					if (Array.isArray(section)) {
+						const targetEntry = section.find(t => t.name === target.name);
+						if (targetEntry) {
+							targetEntry.name = fileStem;
+						}
+					}
+				}
+				
+				// Write back
+				const newContent = toml.stringify(manifest as any);
+				fs.writeFileSync(cargoTomlPath, newContent, 'utf-8');
+				
+				actions.push(`renamed to "${fileStem}"`);
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to update Cargo.toml: ${error}`);
+				return;
+			}
+		}
+		
+		if (actions.length > 0) {
+			const message = actions.length === 1 
+				? `Fixed: ${actions[0]}`
+				: `Fixed: ${actions.join(' and ')}`;
+			vscode.window.showInformationMessage(message);
+			cargoTreeProvider.refresh();
+		}
+	});
+
+	register('cargui.declareAutoDiscoveredTarget', async (item: CargoTreeItem) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
+		if (!workspaceFolder || !item?.target) {
+			return;
+		}
+
+		const target = item.target;
+		
+		if (!target.path) {
+			vscode.window.showErrorMessage('Target has no path specified');
+			return;
+		}
+
+		// Get workspace member if applicable
+		const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+		const member = item.workspaceMember 
+			? members.find(m => m.name === item.workspaceMember)
+			: undefined;
+		
+		const basePath = member 
+			? path.join(workspaceFolder.uri.fsPath, member.path)
+			: workspaceFolder.uri.fsPath;
+		
+		const cargoTomlPath = path.join(basePath, 'Cargo.toml');
+		
+		if (!fs.existsSync(cargoTomlPath)) {
+			vscode.window.showErrorMessage('Cargo.toml not found');
+			return;
+		}
+
+		try {
+			const content = fs.readFileSync(cargoTomlPath, 'utf-8');
+			const manifest = toml.parse(content) as CargoManifest;
+			
+			// Prepare the target entry to add
+			const targetEntry: any = {
+				name: target.name,
+				path: target.path
+			};
+
+			// Add to appropriate section
+			if (target.type === 'example') {
+				if (!manifest.example) {
+					manifest.example = [];
+				}
+				if (!Array.isArray(manifest.example)) {
+					manifest.example = [manifest.example];
+				}
+				manifest.example.push(targetEntry);
+			} else if (target.type === 'test') {
+				if (!manifest.test) {
+					manifest.test = [];
+				}
+				if (!Array.isArray(manifest.test)) {
+					manifest.test = [manifest.test];
+				}
+				manifest.test.push(targetEntry);
+			} else if (target.type === 'bench') {
+				if (!manifest.bench) {
+					manifest.bench = [];
+				}
+				if (!Array.isArray(manifest.bench)) {
+					manifest.bench = [manifest.bench];
+				}
+				manifest.bench.push(targetEntry);
+			} else if (target.type === 'bin') {
+				if (!manifest.bin) {
+					manifest.bin = [];
+				}
+				if (!Array.isArray(manifest.bin)) {
+					manifest.bin = [manifest.bin];
+				}
+				manifest.bin.push(targetEntry);
+			}
+			
+			// Write back to Cargo.toml
+			const newContent = toml.stringify(manifest as any);
+			fs.writeFileSync(cargoTomlPath, newContent, 'utf-8');
+			
+			vscode.window.showInformationMessage(`Declared ${target.type} "${target.name}" in Cargo.toml`);
+			cargoTreeProvider.refresh();
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to update Cargo.toml: ${error}`);
+		}
+	});
+
+	register('cargui.resolveMissingTargetFile', async (item: CargoTreeItem) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
+		if (!workspaceFolder || !item?.target) {
+			return;
+		}
+
+		const target = item.target;
+		
+		// Show quick pick menu with both options
+		const choice = await vscode.window.showQuickPick(
+			[
+				{ label: '$(search) Locate & Move Existing File', value: 'locate' },
+				{ label: '$(new-file) Create New File', value: 'create' }
+			],
+			{ placeHolder: `Resolve missing file for ${target.type} "${target.name}"` }
+		);
+
+		if (!choice) {
+			return;
+		}
+
+		// Get workspace member path (used by both options)
+		const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+		const member = item.workspaceMember 
+			? members.find(m => m.name === item.workspaceMember)
+			: undefined;
+		
+		const basePath = member 
+			? path.join(workspaceFolder.uri.fsPath, member.path)
+			: workspaceFolder.uri.fsPath;
+		
+		const targetPath = path.join(basePath, target.path || '');
+
+		if (choice.value === 'locate') {
+			// Locate and move existing file
+			const expectedFileName = path.basename(targetPath);
+			const fileUris = await vscode.window.showOpenDialog({
+				canSelectMany: false,
+				canSelectFiles: true,
+				canSelectFolders: false,
+				filters: { 'Rust files': ['rs'] },
+				openLabel: 'Select target file',
+				title: `Locate "${expectedFileName}" for ${target.type} "${target.name}"`
+			});
+
+			if (!fileUris || fileUris.length === 0) {
+				return;
+			}
+
+			const sourceFile = fileUris[0].fsPath;
+			const selectedFileName = path.basename(sourceFile);
+			
+			// Verify the selected file has the expected name
+			if (selectedFileName !== expectedFileName) {
+				vscode.window.showErrorMessage(
+					`Selected file "${selectedFileName}" does not match expected filename "${expectedFileName}"`
+				);
+				return;
+			}
+			
+			// Move the file to the target location
+			try {
+				// Ensure target directory exists
+				const targetDir = path.dirname(targetPath);
+				if (!fs.existsSync(targetDir)) {
+					fs.mkdirSync(targetDir, { recursive: true });
+				}
+				
+				// Move file
+				fs.renameSync(sourceFile, targetPath);
+				
+				vscode.window.showInformationMessage(`Moved ${expectedFileName} to ${target.path}`);
+				cargoTreeProvider.refresh();
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to move file: ${error}`);
+			}
+		} else {
+			// Create new file
+			try {
+				// Ensure directory exists
+				const targetDir = path.dirname(targetPath);
+				if (!fs.existsSync(targetDir)) {
+					fs.mkdirSync(targetDir, { recursive: true });
+				}
+				
+				// Create file with basic template based on target type
+				let template = '';
+				if (target.type === 'bin') {
+					template = `//! ${target.name} - Binary target\n\nfn main() {\n    println!(\"Hello from ${target.name}!\");\n}\n`;
+				} else if (target.type === 'lib') {
+					template = `//! ${target.name} - Library crate\n\n`;
+				} else if (target.type === 'example') {
+					template = `//! ${target.name} - Example\n\nfn main() {\n    println!(\"Example: ${target.name}\");\n}\n`;
+				} else if (target.type === 'test') {
+					template = `//! ${target.name} - Integration test\n\n#[test]\nfn test_${target.name.replace(/-/g, '_')}() {\n    // Add test here\n}\n`;
+				} else if (target.type === 'bench') {
+					template = `//! ${target.name} - Benchmark\n\nuse criterion::{black_box, criterion_group, criterion_main, Criterion};\n\nfn benchmark(c: &mut Criterion) {\n    c.bench_function(\"${target.name}\", |b| b.iter(|| {\n        // Add benchmark here\n    }));\n}\n\ncriterion_group!(benches, benchmark);\ncriterion_main!(benches);\n`;
+				}
+				
+				fs.writeFileSync(targetPath, template, 'utf-8');
+				
+				// Open the newly created file
+				const doc = await vscode.workspace.openTextDocument(targetPath);
+				await vscode.window.showTextDocument(doc);
+				
+				vscode.window.showInformationMessage(`Created ${target.type} file at ${target.path}`);
+				cargoTreeProvider.refresh();
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to create file: ${error}`);
+			}
+		}
+	});
+
 	register('cargui.moveTargetToStandardLocation', async (clickedTarget: CargoTreeItem, selectedTargets?: CargoTreeItem[]) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder) {
 			return;
 		}
@@ -2193,27 +2554,65 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.changeEdition', async () => {
-		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder) {
 			vscode.window.showErrorMessage('No workspace folder found');
 			return;
 		}
 
-		// Always use workspace root for edition (multi-crate workspaces use [workspace.package])
-		const editionPath = workspaceFolder.uri.fsPath;
-
-		const currentEdition = getCurrentEdition(editionPath);
-		if (!currentEdition) {
+		// Get workspace edition from root
+		const workspaceEditionInfo = getCurrentEdition(workspaceFolder.uri.fsPath);
+		if (!workspaceEditionInfo) {
 			vscode.window.showErrorMessage('Could not read current edition from Cargo.toml');
 			return;
 		}
 
-		const newEdition = await selectEdition(editionPath, currentEdition);
+		// Get member edition if a member is selected
+		let memberEditionInfo;
+		if (state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all') {
+			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+			const member = members.find(m => m.name === state.selectedWorkspaceMember);
+			if (member) {
+				const memberPath = path.join(workspaceFolder.uri.fsPath, member.path);
+				memberEditionInfo = getCurrentEdition(memberPath);
+			}
+		}
+
+		// If workspace has both workspace and member editions, ask which to update
+		let updateWorkspace = true;
+		if (workspaceEditionInfo.workspaceEdition && memberEditionInfo) {
+			// Show member's explicit edition if it has one, otherwise show that it inherits
+			const memberEditionDisplay = memberEditionInfo.hasExplicitEdition 
+				? memberEditionInfo.edition 
+				: `${memberEditionInfo.edition} (inherited from workspace)`;
+			const workspaceEditionDisplay = workspaceEditionInfo.workspaceEdition;
+			
+			const choice = await vscode.window.showQuickPick(
+				[
+					{ label: 'Update member edition', description: `currently ${memberEditionDisplay}`, value: 'member' },
+					{ label: 'Update workspace edition', description: `currently ${workspaceEditionDisplay}`, value: 'workspace' }
+				],
+				{ placeHolder: 'Which edition do you want to update?' }
+			);
+
+			if (!choice) {
+				return;
+			}
+
+			updateWorkspace = choice.value === 'workspace';
+		}
+
+		const currentEdition = updateWorkspace && workspaceEditionInfo.workspaceEdition 
+			? workspaceEditionInfo.workspaceEdition 
+			: (memberEditionInfo?.edition || workspaceEditionInfo.edition);
+
+		const newEdition = await selectEdition(workspaceFolder.uri.fsPath, currentEdition);
 		if (newEdition && newEdition !== currentEdition) {
-			const success = await updateEdition(editionPath, newEdition);
+			const success = await updateEdition(workspaceFolder.uri.fsPath, newEdition, updateWorkspace);
 			if (success) {
 				cargoTreeProvider.refresh();
-				vscode.window.showInformationMessage(`Rust edition changed to ${newEdition}`);
+				const target = updateWorkspace ? 'workspace' : 'member';
+				vscode.window.showInformationMessage(`Rust ${target} edition changed to ${newEdition}`);
 			} else {
 				vscode.window.showErrorMessage('Failed to update edition in Cargo.toml');
 			}
@@ -2223,7 +2622,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	register('cargui.new', async () => {
 		const projectType = await vscode.window.showQuickPick(
 			['Binary (application)', 'Library'],
-			{ placeHolder: 'Select project type' }
+			{ placeHolder: 'Select package type' }
 		);
 
 		if (!projectType) {
@@ -2231,14 +2630,14 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 
 		const projectName = await vscode.window.showInputBox({
-			prompt: 'Enter project name',
-			placeHolder: 'my-project',
+			prompt: 'Enter package name',
+			placeHolder: 'my-package',
 			validateInput: text => {
 				if (!text) {
-					return 'Project name cannot be empty';
+					return 'Package name cannot be empty';
 				}
 				if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(text)) {
-					return 'Project name must start with a letter and contain only letters, numbers, hyphens, and underscores';
+					return 'Package name must start with a letter and contain only letters, numbers, hyphens, and underscores';
 				}
 				return null;
 			}
@@ -2253,7 +2652,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			canSelectFolders: true,
 			canSelectMany: false,
 			openLabel: 'Select parent folder',
-			title: 'Select folder where the project will be created'
+			title: 'Select folder where the package will be created'
 		});
 
 		if (!targetFolder?.length) {
@@ -2269,10 +2668,10 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		terminal.sendText(`cd "${targetFolder[0].fsPath}" && cargo new ${libFlag} ${projectName}`);
 
 		vscode.window.showInformationMessage(
-			`Creating ${isLib ? 'library' : 'binary'} project: ${projectName}`,
-			'Open Project'
+			`Creating ${isLib ? 'library' : 'binary'} package: ${projectName}`,
+			'Open Package'
 		).then(selection => {
-			if (selection === 'Open Project') {
+			if (selection === 'Open Package') {
 				vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(projectPath));
 			}
 		});
@@ -3870,7 +4269,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 		}
 	});
 
-	// We open the root workspace Cargo.toml file in the editor when the project header is clicked
+	// We open the root workspace Cargo.toml file in the editor when the package header is clicked
 	register('cargui.openProjectCargoToml', async (memberName: string | null | undefined) => {
 		console.log('[cargUI] openProjectCargoToml called with memberName:', memberName);
 		const workspace = vscode.workspace.workspaceFolders?.[0];
@@ -3883,7 +4282,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 		let resolvedMemberName = memberName;
 
 		// if no member name passed, check if one is selected in the tree provider
-		// this handles context menu invocation from the project header
+		// this handles context menu invocation from the package header
 		if (!resolvedMemberName) {
 			resolvedMemberName = cargoTreeProvider.getSelectedWorkspaceMember();
 			console.log('[cargUI] Resolved memberName from tree provider:', resolvedMemberName);
@@ -3923,11 +4322,12 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 
 	// We open the main.rs or lib.rs file when "View in main target" is clicked
 	register('cargui.viewInMainTarget', async (item: CargoTreeItem) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder) {
 			return;
 		}
 
-		// we only handle modules and members - for project header without member, bail
+		// we only handle modules and members - for package header without member, bail
 		if (!item?.moduleInfo && !item?.workspaceMember) {
 			return;
 		}
@@ -4003,6 +4403,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 
 	// We open the documentation for the crate when "View documentation" is clicked
 	register('cargui.viewDocumentation', async (item: CargoTreeItem) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder) {
 			return;
 		}
@@ -4075,7 +4476,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 			return;
 		}
 
-		// for project header, we need a workspace member to be selected
+		// for package header, we need a workspace member to be selected
 		// we get the selected member from the tree provider state, not from item properties
 		// (tree items don't reliably preserve custom properties through context menu invocation)
 		const selectedMember = cargoTreeProvider.getSelectedWorkspaceMember();
@@ -4140,6 +4541,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 
 	// We open the main.rs or lib.rs file of a workspace member
 	register('cargui.viewMemberMainTarget', async (item: CargoTreeItem) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder || !item?.workspaceMember) {
 			return;
 		}
@@ -4175,6 +4577,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 
 	// We open the documentation for a workspace member's crate
 	register('cargui.viewMemberDocs', async (item: CargoTreeItem) => {
+		const workspaceFolder = deps.getWorkspaceFolder();
 		if (!workspaceFolder || !item?.workspaceMember) {
 			return;
 		}

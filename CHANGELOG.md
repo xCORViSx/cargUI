@@ -2,6 +2,331 @@
 
 All notable changes to the cargUI extension will be documented in this file.
 
+## [1.3.3] - 2025-11-23
+
+### Changed
+
+- **Cleaner Tree View Tooltips**: Removed extraneous tooltip text from tree view headers
+  - Workspace root package header: No longer shows "Selected Workspace Member" suffix
+  - Workspace Members category: No longer shows redundant tooltip on hover
+  
+- **Improved Validation Messages**: Target validation tooltips now provide more specific, actionable error details
+  - Format changed from "entry" to "declaration" for accurate terminology
+  - Combined validation issues: Shows both name mismatch AND wrong directory when both exist
+  - Messages restructured as proper sentences with shared "INVALID Cargo.toml declaration:" prefix
+  - Directory types pluralized (examples/, tests/, benches/, bins/) for accuracy
+
+### Fixed
+
+- **Package Folder Terminology**: Standardized "workspace folder" → "package folder" throughout folder switching feature
+  - Command title: "Select Workspace Folder" → "Select Package Folder"
+  - Notification messages now use "package folder"
+  - Quick pick placeholder updated for consistency
+
+### Documentation
+
+- **README Cleanup**: Removed all footnote references and footnote definitions section
+  - Reduced file size from 951 to 837 lines
+  - Cleaner reading experience without reference markers
+  
+- **Agent Documentation**: Added comprehensive guides for project development
+  - Created specialized .agent.md files for testing, debugging, refactoring, and release management
+  - Updated AGENTS.md with edit history format guide and essential workspace contents
+  - Documented one-date-per-header rule for edit history files
+
+### Added
+
+- **Auto-Discovered Target Visual Indicators**: Targets found in standard directories but not declared in Cargo.toml now have distinct visual styling
+  - Auto-discovered targets display with **bright black (gray)** icons to distinguish them from declared targets
+  - New inline **declare button** (+) appears on auto-discovered targets to add them to Cargo.toml
+  - Tooltip indicator "💡 Not declared in Cargo.toml (auto-discovered)" explains the gray icon
+  - After clicking declare button, target is added to Cargo.toml and styling returns to normal
+  - Applies to examples, tests, and benchmarks in their standard directories (examples/, tests/, benches/)
+
+- **Missing File Detection**: Targets declared in Cargo.toml but with missing files now have error indicators
+  - Missing file targets display with **bright yellow** icons and text for maximum visibility
+  - Tooltip shows "⚠️ File does not exist (but declared in Cargo.toml)" to clarify the issue
+  - Inline **Resolve Missing File** button (🔧) provides two recovery options via quick pick menu:
+    - **Locate & Move Existing File**: Opens file picker to find the missing file (must match expected filename)
+    - **Create New File**: Generates appropriate template based on target type (bin, lib, example, test, bench)
+  - File picker validates filename matches expected name before moving
+  - Created files include target-specific templates with proper //! headers and basic code structure
+  - Tree automatically refreshes after resolution
+
+- **Workspace Edition Display**: Multi-crate workspaces now show edition information more clearly
+  - When viewing workspace root (no member selected): displays "Workspace Edition: XXXX"
+  - When viewing specific member: displays "Edition: XXXX [WS: YYYY]" showing both member and workspace editions
+  - Tooltip provides detailed edition information
+  - Helps distinguish between workspace-level and member-level edition configuration
+
+### Changed
+
+- **Auto-Discovered Targets No Longer Appear in Unknowns**: Files in examples/, tests/, and benches/ directories are legitimate targets via Cargo's implicit discovery rules
+  - Removed from unknown detection to prevent duplication (appearing in both proper category and Unknowns folder)
+  - Only truly unknown files (outside standard directories and not in Cargo.toml) appear in Unknowns
+
+- **Visual Separators**: Tree view separators now use empty labels instead of Unicode characters
+  - Creates cleaner visual spacing between main sections and configuration group
+  - Improved readability and less visual clutter
+
+### Technical
+
+- Added `autoDiscovered?: boolean` property to `CargoTarget` interface (types.ts:60)
+- cargoDiscovery.ts marks auto-discovered targets with flag (lines 221, 268, 322)
+- smartDetection.ts skips examples/, tests/, benches/ directories in unknown detection (lines 145-187)
+- cargoTreeProvider.ts applies bright black icon color when `target.autoDiscovered` is true (line 2028)
+- New `target-autodiscovered` contextValue enables conditional declare button (cargoTreeProvider.ts:1948)
+- `cargui.declareAutoDiscoveredTarget` command adds target to Cargo.toml (commands.ts:1114-1201)
+- Icon color uses `terminal.ansiBrightBlack` theme color for consistent gray appearance across themes
+- File existence check added to getTargetStatus using fs.existsSync() (cargoTreeProvider.ts:1785-1788)
+- Missing files return `terminal.ansiBrightYellow` color with detailed tooltip
+- New `target-missing` contextValue for conditional resolve button display (cargoTreeProvider.ts:1953)
+- `cargui.resolveMissingTargetFile` command shows quick pick menu with locate/create options (commands.ts:1207-1320)
+- Locate option validates selected filename matches expected name before moving
+- Create option generates templates: bin (main function), lib (empty), example (main), test (#[test]), bench (criterion setup)
+- Modified `getCurrentEdition` in rustEdition.ts to return both member and workspace editions as object
+- Edition display logic in cargoTreeProvider.ts checks `selectedWorkspaceMember` state (lines 820-858)
+- Updated `selectEdition` and `changeEdition` command to work with new edition object structure
+- Tree separators changed from Unicode characters to empty string labels (cargoTreeProvider.ts:947, 1099)
+- Added `cargui.selectWorkspaceFolder` command registration in commands.ts for multi-root workspace switching
+
+---
+
+## [1.3.1] - 2025-11-22
+
+### Changed
+
+- **Target Display Color Schemes**: Swapped icon and text coloring logic for better visual hierarchy
+  - Target **text color** now shows documentation health (green for 90-100%, blue for 50-90%, default for <50%)
+  - Target **icon color** now shows validation status (yellow for wrong location, red for unknown path, purple for custom location)
+  - Target **description** now shows documentation health percentage instead of file path
+  - Makes health status more prominent while keeping validation warnings visible through icons
+
+- **Custom Location Indicators**: Changed from magenta to purple with improved visual feedback
+  - Custom location targets now use purple (`charts.purple`) icon color
+  - Tooltip shows 🟪 (purple square) emoji for custom locations
+  - Warning triangle (⚠️) only appears for yellow validation issues (name mismatch, wrong directory)
+  - Purple and red status messages display without warning triangle for cleaner tooltips
+
+- **Workspace Dependency Coloring**: Orange theme extended to all workspace-related dependencies
+  - Workspace dependencies (in WORKSPACE category) display with orange icons
+  - Inherited dependencies (workspace stars in Production/Dev/Build categories) also use orange icons
+  - Consistent orange coloring across all workspace-related items
+
+### Added
+
+- **Dependency Section Navigation**: New context menu option "View in Cargo.toml" for dependency subcategories
+  - WORKSPACE subcategory opens `[workspace.dependencies]` section
+  - Production subcategory opens `[dependencies]` section
+  - Dev subcategory opens `[dev-dependencies]` section
+  - Build subcategory opens `[build-dependencies]` section
+  - Automatically navigates to correct Cargo.toml (root for workspace deps, member-specific for others)
+
+- **Auto-Fix Validation Issues**: New resolve button for targets with yellow validation warnings
+  - Inline wrench icon (🔧) button appears only on targets with yellow validation status
+  - Automatically fixes name mismatch issues by renaming target in Cargo.toml to match filename
+  - Automatically fixes wrong directory issues by moving file to standard location for target type
+  - Prioritizes directory fixes over name fixes (directory location is more critical)
+  - Shows success notification indicating which action was taken
+  - Accessible via `cargui.resolveTargetValidation` command
+
+### Fixed
+
+- **Workspace Member Selection**: Clicking workspace members now properly refreshes tree after switching workspace folders
+  - `setSelectedWorkspaceMember()` now triggers tree refresh
+  - Ensures member targets, modules, and dependencies display correctly after folder switch
+
+### Technical
+
+- Modified `cargoTreeProvider.ts` target rendering (lines 1950-1958) to apply health colors via `decorationProvider` (text) and validation colors via `ThemeIcon` (icon)
+- Changed custom location color from `terminal.ansiBrightMagenta` to `charts.purple` (lines 1797, 1883)
+- Updated tooltip prefix logic to conditionally show ⚠️ only for `charts.yellow` validation issues
+- Target description now calculates and displays health percentage string
+- Workspace dependencies receive orange `ThemeColor` during icon creation
+- Inherited dependencies (star icons) also receive orange coloring in all categories
+- Added `viewDependencySectionInCargoToml` command with section detection logic
+- Added context menu entries in package.json for dependency subcategories
+- Fixed `setSelectedWorkspaceMember()` to call `refresh()` for immediate tree update
+- Added `cargui-target-yellow` resourceUri scheme for conditional resolve button visibility (lines 1967-1969)
+- Implemented `resolveTargetValidation` command in commands.ts (lines 1021-1127)
+- Command analyzes validation issue type and executes appropriate fix (rename or relocate)
+- Inline button configured in package.json with `resourceScheme == cargui-target-yellow` condition
+- Added toml and CargoManifest imports to commands.ts for Cargo.toml manipulation
+
+## [1.3.0] - 2025-11-22
+
+### Added
+
+- **Multi-Root Workspace Support**: Full support for VS Code multi-root workspaces with multiple Rust packages
+  - Workspace folder selector button on package header (folder icon)
+  - Quick pick menu with intelligent sorting (last accessed first, current last)
+  - Automatic file explorer integration: collapses previous folder, expands new folder
+  - Persistent workspace folder selection across sessions
+  - Access history tracking (last 10 workspaces)
+  - Context-aware: button only appears when multiple workspace folders exist
+
+### Changed
+
+- **Undeclared Feature Context Menu**: Renamed "View Feature in Cargo.toml" to "View Cargo.toml" for undeclared features
+  - Opens Cargo.toml at `[features]` section instead of showing "not found" error
+  - Separate command for declared features (shows exact line) vs undeclared (shows section)
+  - More intuitive workflow for adding new features
+
+- **Custom Location Target Color**: Changed from blue to bright magenta (`terminal.ansiBrightMagenta`)
+  - More visually distinct from health indicators
+  - Easier to spot non-standard target locations
+
+### Technical
+
+- Added workspace folder selection UI to package header with inline button
+- Context variable `cargui.hasMultipleWorkspaceFolders` controls button visibility
+- `workspaceState` stores selected folder index and access history
+- `selectWorkspaceFolder()` function updates tree provider context
+- Explorer integration via `revealInExplorer`, `list.collapse`, `list.expand` commands
+- Smart sorting algorithm: access history first, current folder last
+- Fixed `getChildren()` to use `this.workspaceFolder` instead of hardcoded `[0]`
+- Added `viewCargoToml` command for undeclared features
+- Modified `viewFeatureInCargoToml` to open file at `[features]` section when not found
+- Changed custom location color from `charts.blue` to `terminal.ansiBrightMagenta`
+
+## [1.2.0] - 2025-11-22
+
+### Added
+
+- **AI-Powered Documentation Improvement**: New sparkle button ($(sparkle)) on all module items enables one-click documentation generation
+  - Automatically detects missing module headers (`//!`) and undocumented code elements
+  - Generates contextual documentation using GPT-4o language model
+  - Scans for undocumented functions, structs, enums, traits, type aliases, constants, and statics
+  - Real-time progress indicator shows task completion status
+  - Automatically inserts generated doc comments with proper indentation
+  - Refreshes tree view and opens file to display changes
+
+- **Module Header Health Criterion**: Module health calculation now includes module header (`//!`) as required documentation
+  - Header counts as 1 item in total documentation count
+  - Formula: (hasHeader ? 1 : 0) + documentedElements / (1 + totalElements) * 100
+  - Tooltips show header status: "📋 Has module header (//!)" or "Missing header (//!)"
+  - More accurate representation of module documentation completeness
+  - Affects health percentage and color thresholds (green: 90-100%, blue: 50-90%)
+
+- **Smart Context Prioritization**: AI receives relevancy-weighted codebase context for accurate documentation
+  - Parses current file's `use` statements to identify direct dependencies
+  - Assigns relevancy scores to all .rs files based on relationship to current module:
+    - 1000: Current file being documented
+    - 900: Files directly imported via `use` statements
+    - 850: Files that import/reference current file
+    - 700: Files in same directory
+    - 600: Files with similar names (related modules)
+    - 500: `mod.rs` files (module definitions)
+    - 450: `lib.rs`/`main.rs` (entry points)
+    - 100: All other files
+  - Sorts files by relevancy score and includes up to 100KB (~25K tokens)
+  - Ensures AI sees most relevant context first while staying within token budget
+  - Each file labeled with relative path and relevancy score
+
+- **Full Codebase Context**: AI has comprehensive project understanding when generating documentation
+  - Recursively scans all `.rs` files in `src/` directory
+  - Respects workspace member boundaries
+  - Skips `target/`, `node_modules/`, `.git/` directories
+  - Up to 100KB of prioritized code included in AI prompts
+  - Leaves ~100K tokens available for AI responses
+
+### Changed
+
+- **Module Health Calculation**: Now includes header as required documentation item
+  - Previous: Only counted code elements (functions, structs, etc.)
+  - New: Counts header + code elements
+  - Example: Module with 5 functions (3 documented) + no header = 3/6 items = 50%
+  - Example: Same module with header = 4/6 = 66%, all documented = 6/6 = 100%
+
+- **Module Tooltips**: Enhanced with header status and detailed documentation breakdown
+  - Shows header presence: "📋 Has module header (//!)" or "Missing header (//!)"
+  - Documentation stats format: "X/Y items (Z%)"
+  - Element breakdown shows: "- Elements: X/Y"
+
+### Technical
+
+- Added `hasHeader` property to `ModuleInfo` interface
+- Updated `analyzeModuleFile()` to detect `//!` comments at file start
+- Modified `calculateModuleHealth()` to include header in total/documented counts
+- Added `improveModuleDocumentation` command handler in commands.ts
+- Integrated VS Code Language Model API (`vscode.lm.selectChatModels`)
+- Uses GPT-4o model family for documentation generation
+- Context gathering: recursive file scanning with depth limit of 5
+- Relevancy scoring: dependency graph analysis + directory proximity
+- Use statement parsing with regex: `/^use\s+(?:crate::)?([^:;{]+)/gm`
+- Buffer size calculation for 100KB limit enforcement
+- Progress reporting with increment calculation
+- Prompt engineering: separate prompts for headers vs elements
+
+## [1.1.7] - 2025-11-22
+
+### 🔧 Single-Crate Package Compatibility
+
+**Fixed:**
+
+- **Registration system for single-crate packages** - Unknown targets now register correctly in packages without workspace members
+  - Fixed \"Member not found\" errors when `memberName` set but no workspace exists
+  - `applyCargoTomlChanges` now treats unfound members as root when `workspaceMembers.length === 0`
+  
+- **File moving operations** - Moving targets to standard locations (src/bin/, examples/, tests/, benches/) now works in single-crate packages
+  - Fixed `moveTargetToStandardLocation` to handle member lookup failures
+  
+- **Target reassignment** - Converting target types (bin ↔ example ↔ test ↔ bench) now works in single-crate packages
+  - Fixed `reassignTargetType` member lookup fallback
+  
+- **Smart detection file preview** - Hovering over unregistered targets in detection UI now opens correct files
+  - Fixed `smartDetectionUI.ts` to lookup member path from `memberName` instead of using it directly as path
+  - Previously failed because `memberName` is package name, not a file path
+
+**Technical:**
+
+- Root cause: `smartDetection.ts` sets `memberName = manifest.package?.name` for all packages
+- Single-crate: `discoverWorkspaceMembers()` returns empty array → lookup fails
+- Solution: Check `workspaceMembers.length === 0` and treat unfound members as root package
+- Applied pattern across 5 functions: `applyCargoTomlChanges`, `moveTargetToStandardLocation`, `reassignTargetType`, `registerUnknownTarget` file moving, and both file opening paths in `smartDetectionUI`
+- Added debug logging to all affected functions
+
+---
+
+## [1.1.6] - 2025-11-22
+
+### ✨ Module Visibility & Declaration Navigation
+
+**Added:**
+
+- **Toggle module visibility button** - Inline eye icon button on declared modules to toggle between public (`pub mod`) and private (`mod`)
+- Shows notification confirming new visibility state after toggle
+- Works with both root-level modules (declared in main.rs/lib.rs) and nested submodules (declared in parent mod.rs)
+- Correctly handles directory modules (e.g., `cpu/mod.rs`) as root-level, not nested
+
+**Changed:**
+
+- **"View declaration" context menu** - Renamed from "View main target" to clarify it navigates to module's `mod` declaration line
+- **Smart declaration file detection** - "View declaration" now correctly opens the actual parent file containing the module declaration:
+  - Root modules → opens main.rs or lib.rs
+  - Nested submodules → opens parent module's mod.rs file
+  - Example: `database/queries.rs` opens `database/mod.rs` and navigates to `mod queries;` line
+
+**Fixed:**
+
+- **Submodule declaration routing** - Fixed `declareModule` command to correctly target parent mod.rs files for nested submodules instead of always using main.rs/lib.rs
+- **Directory module detection** - Fixed algorithm to treat `modulename/mod.rs` as root-level (not nested) when determining declaration file
+
+**Removed:**
+
+- **Directory descriptor from modules** - Removed `(dir)` label from module descriptions; now only show child count, privacy indicator, and health percentage
+
+**Technical:**
+
+- Added `cargui.toggleModuleVisibility` command with eye icon
+- Inline button appears on all declared modules (`viewItem == module`)
+- Toggle logic uses same path analysis as `declareModule` to find correct parent file
+- Root-level detection: `pathParts.length === 1 || (pathParts.length === 2 && pathParts[1] === 'mod.rs')`
+- Module name normalization removes both `.rs` extension and `/mod` suffix
+- Updated `viewInMainTarget` command to use hierarchical path detection instead of always opening main.rs/lib.rs
+
+---
+
 ## [1.1.5] - 2025-11-21
 
 ### 📝 Documentation Update
@@ -99,7 +424,7 @@ All notable changes to the cargUI extension will be documented in this file.
 - **Comprehensive target validation** - All target types validate name-to-filename matching and directory correctness
 - **Workspace member context menus** - Right-click members for "View main target", "View documentation", "View Cargo.toml"
 - **Module documentation viewer** - "View documentation" builds and opens local docs at correct module path
-- **Orange workspace indicators** - Project header and workspace category use orange for visual prominence
+- **Orange workspace indicators** - Package header and workspace category use orange for visual prominence
 - **Itemized snapshot tooltips** - List all targets, features, arguments, env vars, and checked members
 
 **Changed:**
@@ -124,9 +449,9 @@ All notable changes to the cargUI extension will be documented in this file.
 
 ### ✨ Tree View Enhancement & Argument Improvements
 
-**Project Header:**
+**Package Header:**
 
-- **Top-level project item** - Tree now displays project name and version at the very top (format: `ProjName (vX.Y.Z)`)
+- **Top-level package item** - Tree now displays package name and version at the very top (format: `PkgName (vX.Y.Z)`)
 - **Auto-prefix arguments** - Arguments no longer require `--` prefix; automatically added when building commands
 - **Fixed spacing** - Terminal commands now use `--arg` instead of `-- arg` format
 
@@ -144,7 +469,7 @@ All notable changes to the cargUI extension will be documented in this file.
 
 **UI Customization:**
 
-- **Streamlined toolbar for Cursor** - Title bar now shows only essential buttons (New Project, Build, Run, Check, Fix) when running in Cursor
+- **Streamlined toolbar for Cursor** - Title bar now shows only essential buttons (New Package, Build, Run, Check, Fix) when running in Cursor
 - **Full toolbar in VS Code** - VS Code users continue to see all buttons (Test, Clean, Fmt, Doc, Update, Format Cargo.toml, Keybindings)
 
 ---
@@ -217,7 +542,7 @@ All notable changes to the cargUI extension will be documented in this file.
 
 - **Edition feature now always updates workspace root** - No longer member-sensitive
   - Multi-crate workspaces always update `[workspace.package]` edition section
-  - Single-crate projects update `[package]` edition section
+  - Single-crate packages update `[package]` edition section
   - Handles workspace inheritance properly with helpful UI guidance
 
 - **Multi-dependency version updates** - Fixed `cargo update` with multiple precise versions
@@ -247,7 +572,7 @@ All notable changes to the cargUI extension will be documented in this file.
 **Technical Details:**
 
 - The edition feature now checks for `selectedWorkspaceMember` and uses that member's path
-- Properly handles both workspace members and single-crate projects
+- Properly handles both workspace members and single-crate packages
 - Avoids variable redeclaration issues by reorganizing code flow
 
 ---
@@ -277,7 +602,7 @@ All notable changes to the cargUI extension will be documented in this file.
 **Added:**
 
 - **Full library target support** - Auto-detects `src/lib.rs` and `[lib]` sections in Cargo.toml
-- **Keyboard shortcuts now work with library-only crates** - No more broken shortcuts in library projects!
+- **Keyboard shortcuts now work with library-only crates** - No more broken shortcuts in library packages!
 - **Star icon (⭐) indicators** - Primary targets (`src/main.rs` and `src/lib.rs`) are marked with stars
 - **Auto-selection fallback** - When no targets are checked, commands automatically use `src/lib.rs` if `src/main.rs` doesn't exist
 - **Module counts** - MODULES category and all subcategories now show direct children counts
@@ -305,7 +630,7 @@ cargUI v1.0.0 is now production-ready with all planned features implemented.
 
 **Added:**
 
-**🎨 Project Organization:**
+**🎨 Package Organization:**
 
 - Smart detection system for unregistered targets and undeclared features
 - Module visualization with color-coded health indicators (🟢🔵🟡🟠)
