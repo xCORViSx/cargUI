@@ -14,6 +14,7 @@ export interface CargoTreeState {
     getCheckedEnvVars(): string[];
     getCheckedWorkspaceMembers(): string[];
     setWorkspaceMemberChecked(member: string, checked: boolean): void;
+    getWorkspaceFolder(): vscode.WorkspaceFolder | undefined;
     refresh(): void;
 }
 
@@ -31,7 +32,7 @@ export function buildWithFeature(
     treeProvider: CargoTreeState,
     selectedWorkspaceMember?: string
 ) {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workspaceFolder = treeProvider.getWorkspaceFolder();
     if (!workspaceFolder) {
         vscode.window.showErrorMessage('No workspace folder found');
         return;
@@ -117,7 +118,7 @@ export function runCargoTarget(
     cargoTreeProvider: CargoTreeState,
     requiredFeatures?: string[]
 ) {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workspaceFolder = cargoTreeProvider.getWorkspaceFolder();
     if (!workspaceFolder) {
         vscode.window.showErrorMessage('No workspace folder found');
         return;
@@ -130,8 +131,9 @@ export function runCargoTarget(
     let command = '';
     switch (targetType) {
         case 'bin':
-            // Skip --bin for src/main.rs (default binary)
-            if (currentTarget?.path === 'src/main.rs') {
+            // Skip --bin for src/main.rs only if it's the ONLY binary
+            const binCount = allTargets.filter(t => t.type === 'bin').length;
+            if (currentTarget?.path === 'src/main.rs' && binCount === 1) {
                 command = 'cargo run';
             } else {
                 command = `cargo run --bin ${targetName}`;
@@ -199,7 +201,7 @@ export function buildSingleTarget(
     cargoTreeProvider?: CargoTreeState,
     requiredFeatures?: string[]
 ) {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workspaceFolder = cargoTreeProvider?.getWorkspaceFolder() || vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
         vscode.window.showErrorMessage('No workspace folder found');
         return;
@@ -220,8 +222,9 @@ export function buildSingleTarget(
     
     // Add target-specific flags
     if (targetType === 'bin') {
-        // Skip --bin for src/main.rs (default binary)
-        if (currentTarget?.path !== 'src/main.rs') {
+        // Skip --bin for src/main.rs only if it's the ONLY binary AND no workspace member selected
+        const binCount = allTargets.filter(t => t.type === 'bin').length;
+        if (currentTarget?.path !== 'src/main.rs' || binCount > 1 || selectedWorkspaceMember) {
             command += ` --bin ${targetName}`;
         }
     } else if (targetType === 'example') {
@@ -269,7 +272,7 @@ export async function runCargoCommandOnTargets(
     treeProvider: CargoTreeState,
     selectedWorkspaceMember?: string
 ) {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workspaceFolder = treeProvider.getWorkspaceFolder();
     if (!workspaceFolder) {
         vscode.window.showErrorMessage('No workspace folder found');
         return;
@@ -403,15 +406,12 @@ export async function runCargoCommandOnTargets(
     const checkedFeatures = treeProvider.getCheckedFeatures();
     const allTargets = discoverCargoTargets(workspaceFolder.uri.fsPath, memberPath);
     
-    // If no targets are checked, use main target (first binary or library)
+    // If no targets are checked, use main target (src/main.rs or src/lib.rs)
     let targetsToRun: string[] = [];
     if (checkedTargets.length === 0) {
-        // Try to find a binary first (src/main.rs or any binary)
+        // Try to find src/main.rs binary first
         let mainTarget = allTargets.find(t => t.type === 'bin' && t.path === 'src/main.rs');
-        if (!mainTarget) {
-            mainTarget = allTargets.find(t => t.type === 'bin');
-        }
-        // If no binary, fall back to library
+        // If no src/main.rs, fall back to library
         if (!mainTarget) {
             mainTarget = allTargets.find(t => t.type === 'lib');
         }
@@ -440,9 +440,10 @@ export async function runCargoCommandOnTargets(
         
         // Add target-specific flags
         if (target.type === 'bin') {
-            // Skip --bin for src/main.rs ONLY if no --package flag is present
-            // When --package is used, cargo needs explicit --bin even for main.rs
-            if (target.path !== 'src/main.rs' || selectedWorkspaceMember) {
+            // Always specify --bin when there are multiple binaries, even for src/main.rs
+            // Only skip --bin for src/main.rs if it's the ONLY binary
+            const binCount = allTargets.filter(t => t.type === 'bin').length;
+            if (target.path !== 'src/main.rs' || binCount > 1 || selectedWorkspaceMember) {
                 command += ` --bin ${targetName}`;
             }
         } else if (target.type === 'lib') {

@@ -2,6 +2,29 @@
 
 All notable changes to the cargUI extension will be documented in this file.
 
+## [1.3.4] - 2025-11-30
+
+### Added
+
+- **Comprehensive Test Suite**: 1566 automated tests (666 unit + 900 integration)
+  - Unit tests covering all 18 source files with 100+ tests per major module
+  - Integration tests for extension activation, command registration, tree providers, and end-to-end workflows
+  - Test files: cargoCommands, cargoDiscovery, cargoToml, cargoTreeProvider, commands, cratesIo, decorationProvider, defaultConfig, fileOperations, moduleDetection, rustEdition, rustup, scenarios, smartDetection, smartDetectionUI, targetHealth, treeItems
+  - Fast execution (~4s for full suite)
+  - Commands: `npm test` (full suite)
+
+### Changed
+
+- **Build Process**: Removed linting from pre-test step for faster test execution
+- **Code Quality**: Added ESLint configuration with TypeScript support
+
+### Fixed
+
+- **Test Reliability**: Integration tests now wait for full extension activation before checking commands
+- **Duplicate Key Error**: Fixed duplicate `edition` key in test project's core-lib Cargo.toml
+
+---
+
 ## [1.3.3] - 2025-11-23
 
 ### Changed

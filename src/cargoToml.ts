@@ -93,15 +93,22 @@ export async function moveTargetToStandardLocation(
         let cargoTomlContent = fs.readFileSync(cargoTomlPath, 'utf-8');
         const manifest = toml.parse(cargoTomlContent) as CargoManifest;
 
-        // Update the path in the appropriate section
-        const sectionKey = `[[${target.type}]]`;
-        const section = manifest[sectionKey as keyof CargoManifest] as any[];
-        if (Array.isArray(section)) {
-            const targetEntry = section.find((t: any) => t.name === target.name);
-            if (targetEntry) {
-                // Update to relative path from workspace
-                const relativePath = path.relative(basePath, targetFilePath);
-                targetEntry.path = relativePath.replace(/\\/g, '/'); // Normalize to forward slashes
+        // Update the path in the appropriate section (arrays of tables such as [[bin]])
+        const manifestKeyMap: Partial<Record<CargoTarget['type'], keyof CargoManifest>> = {
+            bin: 'bin',
+            example: 'example',
+            test: 'test',
+            bench: 'bench'
+        };
+        const manifestKey = manifestKeyMap[target.type];
+        if (manifestKey) {
+            const section = manifest[manifestKey as keyof CargoManifest] as Array<Record<string, any>> | undefined;
+            if (Array.isArray(section)) {
+                const targetEntry = section.find(t => t.name === target.name);
+                if (targetEntry) {
+                    const relativePath = path.relative(basePath, targetFilePath);
+                    targetEntry.path = relativePath.replace(/\\/g, '/');
+                }
             }
         }
 
@@ -781,31 +788,40 @@ export async function formatCargoTomlFile(cargoTomlPath: string, _memberName?: s
             formatted += '\n';
         }
 
-        for (const key of Object.keys(manifest)) {
-            if (key.startsWith('target.')) {
-                const targetData = manifest[key];
-                formatted += `[${key}]\n`;
+        if (manifest.target && typeof manifest.target === 'object') {
+            const needsQuotes = (name: string) => !/^[A-Za-z0-9_-]+$/.test(name);
+            const targetNames = Object.keys(manifest.target).sort();
 
-                if (targetData.dependencies) {
-                    const deps = Object.keys(targetData.dependencies).sort();
-                    for (const dep of deps) {
-                        formatted += `${dep} = ${serializeValue(targetData.dependencies[dep])}\n`;
-                    }
-                }
-                if (targetData['dev-dependencies']) {
-                    const deps = Object.keys(targetData['dev-dependencies']).sort();
-                    for (const dep of deps) {
-                        formatted += `${dep} = ${serializeValue(targetData['dev-dependencies'][dep])}\n`;
-                    }
-                }
-                if (targetData['build-dependencies']) {
-                    const deps = Object.keys(targetData['build-dependencies']).sort();
-                    for (const dep of deps) {
-                        formatted += `${dep} = ${serializeValue(targetData['build-dependencies'][dep])}\n`;
-                    }
+            for (const targetName of targetNames) {
+                const targetData = manifest.target[targetName];
+                if (!targetData || typeof targetData !== 'object') {
+                    continue;
                 }
 
-                formatted += '\n';
+                const formatTargetKey = (section: string) => {
+                    const safeName = needsQuotes(targetName)
+                        ? `'${targetName.replace(/'/g, "\\'")}'`
+                        : targetName;
+                    return `[target.${safeName}.${section}]`;
+                };
+
+                const writeTargetSection = (section: 'dependencies' | 'dev-dependencies' | 'build-dependencies') => {
+                    const deps = targetData[section];
+                    if (!deps || Object.keys(deps).length === 0) {
+                        return;
+                    }
+
+                    formatted += `${formatTargetKey(section)}\n`;
+                    const depNames = Object.keys(deps).sort();
+                    for (const dep of depNames) {
+                        formatted += `${dep} = ${serializeValue(deps[dep])}\n`;
+                    }
+                    formatted += '\n';
+                };
+
+                writeTargetSection('dependencies');
+                writeTargetSection('dev-dependencies');
+                writeTargetSection('build-dependencies');
             }
         }
 

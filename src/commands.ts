@@ -188,9 +188,10 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	}
 };	const addDependencyWithName = async (
 		initialCrateName?: string,
-		dependencyType?: 'production' | 'dev' | 'build' | 'workspace'
+		dependencyType?: 'production' | 'dev' | 'build' | 'workspace',
+		workspaceFolder?: vscode.WorkspaceFolder
 	) => {
-		const activeWorkspace = vscode.workspace.workspaceFolders?.[0];
+		const activeWorkspace = workspaceFolder || deps.getWorkspaceFolder();
 		if (!activeWorkspace) {
 			return;
 		}
@@ -2227,7 +2228,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			return;
 		}
 
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			vscode.window.showErrorMessage('No workspace folder found');
 			return;
@@ -2298,7 +2299,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		state.isReleaseMode = snapshot.mode === 'release';
 
 		if (snapshot.workspaceMember) {
-			const workspace = vscode.workspace.workspaceFolders?.[0];
+			const workspace = deps.getWorkspaceFolder();
 			if (workspace) {
 				const workspaceMembers = discoverWorkspaceMembers(workspace.uri.fsPath);
 				if (
@@ -2331,7 +2332,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
 		cargoTreeProvider.getCheckedWorkspaceMembers().forEach(m => cargoTreeProvider.setWorkspaceMemberChecked(m, false));
 		if (snapshot.checkedWorkspaceMembers) {
-			const workspace = vscode.workspace.workspaceFolders?.[0];
+			const workspace = deps.getWorkspaceFolder();
 			if (workspace) {
 				const workspaceMembers = discoverWorkspaceMembers(workspace.uri.fsPath);
 				snapshot.checkedWorkspaceMembers.forEach(m => {
@@ -2469,7 +2470,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.toggleWatch', async () => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			vscode.window.showErrorMessage('No workspace folder found');
 			return;
@@ -2569,11 +2570,12 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
 		// Get member edition if a member is selected
 		let memberEditionInfo;
+		let memberPath: string | undefined;
 		if (state.selectedWorkspaceMember && state.selectedWorkspaceMember !== 'all') {
 			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
 			const member = members.find(m => m.name === state.selectedWorkspaceMember);
 			if (member) {
-				const memberPath = path.join(workspaceFolder.uri.fsPath, member.path);
+				memberPath = path.join(workspaceFolder.uri.fsPath, member.path);
 				memberEditionInfo = getCurrentEdition(memberPath);
 			}
 		}
@@ -2608,7 +2610,9 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
 		const newEdition = await selectEdition(workspaceFolder.uri.fsPath, currentEdition);
 		if (newEdition && newEdition !== currentEdition) {
-			const success = await updateEdition(workspaceFolder.uri.fsPath, newEdition, updateWorkspace);
+			// Use member path if updating member, otherwise use workspace root path
+			const targetPath = updateWorkspace ? workspaceFolder.uri.fsPath : (memberPath || workspaceFolder.uri.fsPath);
+			const success = await updateEdition(targetPath, newEdition, updateWorkspace);
 			if (success) {
 				cargoTreeProvider.refresh();
 				const target = updateWorkspace ? 'workspace' : 'member';
@@ -2686,7 +2690,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.formatCargoToml', async () => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			vscode.window.showErrorMessage('No workspace folder found');
 			return;
@@ -2804,7 +2808,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 
 		const dep = item.dependency;
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -2897,7 +2901,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 
 		const dep = item.dependency;
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -3033,7 +3037,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 
 		const dep = item.dependency;
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -3145,7 +3149,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 
 		const featureName = item.feature;
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -3213,7 +3217,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			return;
 		}
 
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -3278,7 +3282,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 
 		const featureName = item.feature;
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -3361,7 +3365,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 			return;
 		}
 
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -3442,7 +3446,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 	});
 
 	register('cargui.declareSelectedFeatures', async (memberPath?: string) => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -3556,7 +3560,7 @@ register('cargui.declareModule', async (item: CargoTreeItem) => {
 		return;
 	}
 
-	const workspace = vscode.workspace.workspaceFolders?.[0];
+	const workspace = deps.getWorkspaceFolder();
 	if (!workspace) {
 		return;
 	}
@@ -3632,7 +3636,7 @@ register('cargui.declareModule', async (item: CargoTreeItem) => {
 });
 
 register('cargui.declareAllUndeclaredModules', async () => {
-	const workspace = vscode.workspace.workspaceFolders?.[0];
+	const workspace = deps.getWorkspaceFolder();
 	if (!workspace) {
 		return;
 	}
@@ -3755,7 +3759,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 		}
 
 		const envVar = item.envVar;
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -3795,7 +3799,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 			return;
 		}
 
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -3995,7 +3999,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 	});
 
 	register('cargui.addWorkspaceDepsToMember', async (item: CargoTreeItem) => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -4135,7 +4139,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 	});
 
 	register('cargui.configureUnregistered', async () => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			vscode.window.showErrorMessage('No workspace folder found');
 			return;
@@ -4144,7 +4148,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 	});
 
 	register('cargui.rescanUnknownTargets', async () => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			vscode.window.showErrorMessage('No workspace folder found');
 			return;
@@ -4158,7 +4162,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 	});
 
 	register('cargui.rescanUndeclaredFeatures', async () => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			vscode.window.showErrorMessage('No workspace folder found');
 			return;
@@ -4172,7 +4176,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 	});
 
 	register('cargui.registerAsBinary', async (item: CargoTreeItem) => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace || !item?.unknownData) {
 			return;
 		}
@@ -4180,7 +4184,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 	});
 
 	register('cargui.registerAsExample', async (item: CargoTreeItem) => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace || !item?.unknownData) {
 			return;
 		}
@@ -4188,7 +4192,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 	});
 
 	register('cargui.registerAsTest', async (item: CargoTreeItem) => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace || !item?.unknownData) {
 			return;
 		}
@@ -4196,7 +4200,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 	});
 
 	register('cargui.registerAsBenchmark', async (item: CargoTreeItem) => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace || !item?.unknownData) {
 			return;
 		}
@@ -4204,7 +4208,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 	});
 
 	register('cargui.registerAllUnknownTargets', async () => {
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			return;
 		}
@@ -4272,7 +4276,7 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 	// We open the root workspace Cargo.toml file in the editor when the package header is clicked
 	register('cargui.openProjectCargoToml', async (memberName: string | null | undefined) => {
 		console.log('[cargUI] openProjectCargoToml called with memberName:', memberName);
-		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const workspace = deps.getWorkspaceFolder();
 		if (!workspace) {
 			vscode.window.showErrorMessage('No workspace folder found');
 			return;
