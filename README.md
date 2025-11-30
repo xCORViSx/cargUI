@@ -805,7 +805,7 @@ cargUI/
 
 ## 📝 Version
 
-**Current:** v1.3.2  
+**Current:** v1.3.4  
 **See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and technical changes**
 
 ---
