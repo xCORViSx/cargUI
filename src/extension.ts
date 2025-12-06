@@ -80,8 +80,10 @@ export async function activate(context: vscode.ExtensionContext) {
                 } else if (item.workspaceMember) {
                     cargoTreeProvider.setWorkspaceMemberChecked(item.workspaceMember, state === vscode.TreeItemCheckboxState.Checked);
                 } else if (item.dependency) {
+                    // Use the unique dependencyKey (depType:depName) if available, otherwise fall back to name
+                    const depKey = item.dependencyKey || item.dependency.name;
                     cargoTreeProvider.setDependencyChecked(
-                        item.dependency.name,
+                        depKey,
                         state === vscode.TreeItemCheckboxState.Checked,
                         item.dependency
                     );

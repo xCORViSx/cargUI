@@ -2,6 +2,43 @@
 
 All notable changes to the cargUI extension will be documented in this file.
 
+## [1.3.7] - 2025-12-04
+
+### Added
+
+- **AI-Powered Documentation Improvement**: Sparkle button ($(sparkle)) on modules and targets enables one-click documentation generation
+  - Re-implemented commands that were lost during development: `improveModuleDocumentation` and `improveTargetDocumentation`
+  - Automatically detects missing module headers (`//!`) and undocumented code elements
+  - Generates contextual documentation using GPT-4o language model via VS Code Language Model API
+  - Scans for undocumented functions, structs, enums, traits, type aliases, constants, and statics
+  - Real-time progress indicator shows task completion status
+  - Automatically inserts generated doc comments with proper indentation
+  - Refreshes tree view and opens file to display changes
+  - Smart context prioritization: AI receives relevancy-weighted codebase context (up to 100KB)
+  - Relevancy scoring based on imports, directory proximity, and file relationships
+
+### Fixed
+
+- **Module Detection**: Now correctly checks both `lib.rs` AND `main.rs` for module declarations
+  - Previously only checked one file, causing modules declared in lib.rs to appear undeclared when main.rs also existed
+
+---
+
+## [1.3.6] - 2025-12-01
+
+### Changed
+
+- **Format Cargo.toml UX Overhaul**: Streamlined formatting workflow for workspaces
+  - Workspaces now immediately show a Quick Pick menu with checkboxes for all Cargo.toml files
+  - Options include Root Workspace and all member packages
+  - No more warning dialogs or extra button clicks
+  - Single packages format directly without prompts
+  - Uses VS Code's native "Select All" checkbox in Quick Pick
+
+- **Path-based Dependencies**: Now display with blue icon and text color for visual distinction
+
+---
+
 ## [1.3.4] - 2025-11-30
 
 ### Added

@@ -687,7 +687,7 @@ npm run compile
 ├── 📦 DEPENDENCIES
 │   ├── Production
 │   │   ├── 🟢 serde 1.0.195    [Latest]
-│   │   └── 🟡 tokio 1.35.0     [1.36.0 available]
+│   │   └──    tokio 1.35.0     [1.36.0 available]
 │   └── Dev
 │       └── 🔵 criterion 0.5.1   [Local]
 ├── ────────────────
@@ -800,13 +800,6 @@ cargUI/
 ├── cargui-demo/                  # Test workspace
 └── package.json
 ```
-
----
-
-## 📝 Version
-
-**Current:** v1.3.4  
-**See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and technical changes**
 
 ---
 

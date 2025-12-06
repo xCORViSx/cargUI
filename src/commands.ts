@@ -2697,22 +2697,62 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 		}
 
 		const workspaceMembers = discoverWorkspaceMembers(workspace.uri.fsPath);
-		const selectedMember = state.selectedWorkspaceMember;
 
-		if (workspaceMembers.length > 1 && (!selectedMember || selectedMember === 'all')) {
-			const choice = await vscode.window.showWarningMessage(
-				'Multiple workspace members detected. Please select a specific member to format its Cargo.toml, or choose to format all.',
-				'Cancel',
-				'Format All Members'
-			);
+		// If this is a workspace (has members), show quick pick regardless of selection
+		if (workspaceMembers.length > 1) {
+			// Build quick pick items for root and all members
+			const items: vscode.QuickPickItem[] = [];
+			
+			// Add root workspace Cargo.toml
+			const rootCargoToml = path.join(workspace.uri.fsPath, 'Cargo.toml');
+			if (fs.existsSync(rootCargoToml)) {
+				items.push({
+					label: '$(home) Root Workspace',
+					description: 'Cargo.toml',
+					picked: false
+				});
+			}
+			
+			// Add each member's Cargo.toml
+			for (const member of workspaceMembers) {
+				const memberCargoTomlPath = path.join(workspace.uri.fsPath, member.path, 'Cargo.toml');
+				if (fs.existsSync(memberCargoTomlPath)) {
+					items.push({
+						label: `$(package) ${member.name}`,
+						description: `${member.path}/Cargo.toml`,
+						picked: false
+					});
+				}
+			}
 
-			if (choice === 'Format All Members') {
-				let successCount = 0;
-				let errorCount = 0;
+			// Show multi-select quick pick
+			const selected = await vscode.window.showQuickPick(items, {
+				canPickMany: true,
+				placeHolder: 'Select Cargo.toml files to format',
+				title: 'Format Cargo.toml Files'
+			});
 
-				for (const member of workspaceMembers) {
-					const memberCargoTomlPath = path.join(workspace.uri.fsPath, member.path, 'Cargo.toml');
-					if (fs.existsSync(memberCargoTomlPath)) {
+			if (!selected || selected.length === 0) {
+				return;
+			}
+
+			let successCount = 0;
+			let errorCount = 0;
+
+			for (const item of selected) {
+				if (item.label.includes('Root Workspace')) {
+					const result = await formatCargoTomlFile(rootCargoToml);
+					if (result) {
+						successCount++;
+					} else {
+						errorCount++;
+					}
+				} else {
+					// Extract member name from label (remove icon prefix)
+					const memberName = item.label.replace('$(package) ', '');
+					const member = workspaceMembers.find(m => m.name === memberName);
+					if (member) {
+						const memberCargoTomlPath = path.join(workspace.uri.fsPath, member.path, 'Cargo.toml');
 						const result = await formatCargoTomlFile(memberCargoTomlPath, member.name);
 						if (result) {
 							successCount++;
@@ -2721,43 +2761,29 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 						}
 					}
 				}
-
-				if (successCount > 0) {
-					vscode.window.showInformationMessage(
-						`Formatted ${successCount} Cargo.toml file(s)` +
-						(errorCount > 0 ? ` (${errorCount} failed)` : '')
-					);
-				}
-				cargoTreeProvider.refresh();
 			}
+
+			if (successCount > 0) {
+				vscode.window.showInformationMessage(
+					`Formatted ${successCount} Cargo.toml file(s)` +
+					(errorCount > 0 ? ` (${errorCount} failed)` : '')
+				);
+			}
+			cargoTreeProvider.refresh();
 			return;
 		}
 
-		let cargoTomlPath: string;
-		let memberName: string | undefined;
-
-		if (selectedMember && selectedMember !== 'all') {
-			const member = workspaceMembers.find(m => m.name === selectedMember);
-			if (!member) {
-				vscode.window.showErrorMessage(`Member "${selectedMember}" not found`);
-				return;
-			}
-			cargoTomlPath = path.join(workspace.uri.fsPath, member.path, 'Cargo.toml');
-			memberName = member.name;
-		} else {
-			cargoTomlPath = path.join(workspace.uri.fsPath, 'Cargo.toml');
-		}
+		// Single package (not a workspace) - format directly
+		const cargoTomlPath = path.join(workspace.uri.fsPath, 'Cargo.toml');
 
 		if (!fs.existsSync(cargoTomlPath)) {
 			vscode.window.showErrorMessage(`Cargo.toml not found at ${cargoTomlPath}`);
 			return;
 		}
 
-		const result = await formatCargoTomlFile(cargoTomlPath, memberName);
+		const result = await formatCargoTomlFile(cargoTomlPath);
 		if (result) {
-			vscode.window.showInformationMessage(
-				`Formatted Cargo.toml` + (memberName ? ` for ${memberName}` : '')
-			);
+			vscode.window.showInformationMessage('Formatted Cargo.toml');
 			cargoTreeProvider.refresh();
 		}
 	});
@@ -4614,6 +4640,493 @@ register('cargui.removeEnvironmentVariable', async (item: CargoTreeItem) => {
 				vscode.env.openExternal(vscode.Uri.file(docPath));
 			}
 		}, 2500); // we wait 2.5 seconds for cargo doc to complete
+	});
+
+	// Helper function to gather codebase context for AI documentation generation
+	// This scans .rs files and prioritizes them by relevance to the target file
+	const gatherCodebaseContext = async (targetFilePath: string, workspaceRoot: string): Promise<string> => {
+		const srcDir = path.join(workspaceRoot, 'src');
+		if (!fs.existsSync(srcDir)) {
+			return '';
+		}
+
+		// Parse use statements from target file to identify direct dependencies
+		const targetContent = fs.readFileSync(targetFilePath, 'utf-8');
+		const useRegex = /^use\s+(?:crate::)?([^:;{]+)/gm;
+		const directDeps = new Set<string>();
+		let match;
+		while ((match = useRegex.exec(targetContent)) !== null) {
+			directDeps.add(match[1].trim());
+		}
+
+		// Recursively find all .rs files
+		const rsFiles: { path: string; score: number }[] = [];
+		const scanDir = (dir: string, depth: number = 0) => {
+			if (depth > 5) return;
+			const entries = fs.readdirSync(dir, { withFileTypes: true });
+			for (const entry of entries) {
+				const fullPath = path.join(dir, entry.name);
+				if (entry.isDirectory()) {
+					if (!['target', 'node_modules', '.git'].includes(entry.name)) {
+						scanDir(fullPath, depth + 1);
+					}
+				} else if (entry.name.endsWith('.rs')) {
+					// Calculate relevancy score
+					let score = 100; // base score
+					const relativePath = path.relative(workspaceRoot, fullPath);
+					
+					if (fullPath === targetFilePath) {
+						score = 1000; // Current file being documented
+					} else if (directDeps.has(path.basename(fullPath, '.rs'))) {
+						score = 900; // Directly imported
+					} else if (path.dirname(fullPath) === path.dirname(targetFilePath)) {
+						score = 700; // Same directory
+					} else if (entry.name === 'mod.rs') {
+						score = 500; // Module definitions
+					} else if (entry.name === 'lib.rs' || entry.name === 'main.rs') {
+						score = 450; // Entry points
+					}
+					
+					rsFiles.push({ path: fullPath, score });
+				}
+			}
+		};
+		scanDir(srcDir);
+
+		// Sort by score (highest first) and build context string
+		rsFiles.sort((a, b) => b.score - a.score);
+		
+		let context = '';
+		let totalSize = 0;
+		const maxSize = 100 * 1024; // 100KB limit
+		
+		for (const file of rsFiles) {
+			const content = fs.readFileSync(file.path, 'utf-8');
+			const relativePath = path.relative(workspaceRoot, file.path);
+			const entry = `\n// === ${relativePath} (relevancy: ${file.score}) ===\n${content}\n`;
+			
+			if (totalSize + entry.length > maxSize) break;
+			context += entry;
+			totalSize += entry.length;
+		}
+		
+		return context;
+	};
+
+	// Helper function to find undocumented elements in a Rust file
+	const findUndocumentedElements = (content: string): { type: string; name: string; line: number }[] => {
+		const elements: { type: string; name: string; line: number }[] = [];
+		const lines = content.split('\n');
+		
+		// Patterns for documentable elements
+		const patterns = [
+			{ regex: /^pub\s+fn\s+(\w+)/, type: 'function' },
+			{ regex: /^pub\s+async\s+fn\s+(\w+)/, type: 'async function' },
+			{ regex: /^fn\s+(\w+)/, type: 'function' },
+			{ regex: /^async\s+fn\s+(\w+)/, type: 'async function' },
+			{ regex: /^pub\s+struct\s+(\w+)/, type: 'struct' },
+			{ regex: /^struct\s+(\w+)/, type: 'struct' },
+			{ regex: /^pub\s+enum\s+(\w+)/, type: 'enum' },
+			{ regex: /^enum\s+(\w+)/, type: 'enum' },
+			{ regex: /^pub\s+trait\s+(\w+)/, type: 'trait' },
+			{ regex: /^trait\s+(\w+)/, type: 'trait' },
+			{ regex: /^pub\s+type\s+(\w+)/, type: 'type alias' },
+			{ regex: /^type\s+(\w+)/, type: 'type alias' },
+			{ regex: /^pub\s+const\s+(\w+)/, type: 'constant' },
+			{ regex: /^const\s+(\w+)/, type: 'constant' },
+			{ regex: /^pub\s+static\s+(\w+)/, type: 'static' },
+			{ regex: /^static\s+(\w+)/, type: 'static' },
+		];
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i].trim();
+			
+			for (const pattern of patterns) {
+				const match = line.match(pattern.regex);
+				if (match) {
+					// Check if previous non-empty line is a doc comment
+					let hasDoc = false;
+					for (let j = i - 1; j >= 0; j--) {
+						const prevLine = lines[j].trim();
+						if (prevLine === '') continue;
+						if (prevLine.startsWith('///') || prevLine.startsWith('//!')) {
+							hasDoc = true;
+						}
+						break;
+					}
+					
+					if (!hasDoc) {
+						elements.push({ type: pattern.type, name: match[1], line: i + 1 });
+					}
+					break;
+				}
+			}
+		}
+		
+		return elements;
+	};
+
+	// Check if file has module header (//!)
+	const hasModuleHeader = (content: string): boolean => {
+		const lines = content.split('\n');
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (trimmed === '') continue;
+			if (trimmed.startsWith('//!')) return true;
+			if (!trimmed.startsWith('//')) return false;
+		}
+		return false;
+	};
+
+	// Improve Module Documentation command - uses AI to generate missing docs
+	register('cargui.improveModuleDocumentation', async (item: CargoTreeItem) => {
+		const moduleInfo = item.moduleInfo;
+		if (!moduleInfo) {
+			vscode.window.showErrorMessage('No module information available');
+			return;
+		}
+
+		const workspaceFolder = deps.getWorkspaceFolder();
+		if (!workspaceFolder) {
+			vscode.window.showErrorMessage('No workspace folder found');
+			return;
+		}
+
+		const filePath = moduleInfo.path;
+		if (!fs.existsSync(filePath)) {
+			vscode.window.showErrorMessage(`File not found: ${filePath}`);
+			return;
+		}
+
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: 'Improving documentation...',
+			cancellable: true
+		}, async (progress, token) => {
+			try {
+				// Select GPT-4o model
+				const models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
+				if (models.length === 0) {
+					vscode.window.showErrorMessage('No GPT-4o model available. Please ensure GitHub Copilot is installed and signed in.');
+					return;
+				}
+				const model = models[0];
+
+				progress.report({ message: 'Analyzing file...', increment: 10 });
+
+				const content = fs.readFileSync(filePath, 'utf-8');
+				const needsHeader = !hasModuleHeader(content);
+				const undocumented = findUndocumentedElements(content);
+
+				if (!needsHeader && undocumented.length === 0) {
+					vscode.window.showInformationMessage('Module is already fully documented!');
+					return;
+				}
+
+				progress.report({ message: 'Gathering context...', increment: 10 });
+
+				const context = await gatherCodebaseContext(filePath, workspaceFolder.uri.fsPath);
+
+				progress.report({ message: 'Generating documentation...', increment: 20 });
+
+				// Build prompt for AI
+				let prompt = `You are a Rust documentation expert. Generate high-quality documentation comments for the following Rust code.
+
+CODEBASE CONTEXT:
+${context}
+
+FILE TO DOCUMENT: ${path.relative(workspaceFolder.uri.fsPath, filePath)}
+${content}
+
+DOCUMENTATION NEEDED:
+`;
+				if (needsHeader) {
+					prompt += `- Module header (//!) at the top of the file explaining the module's purpose\n`;
+				}
+				if (undocumented.length > 0) {
+					prompt += `- Documentation (///) for these undocumented elements:\n`;
+					for (const elem of undocumented) {
+						prompt += `  - ${elem.type} \`${elem.name}\` at line ${elem.line}\n`;
+					}
+				}
+
+				prompt += `
+RULES:
+1. Generate ONLY the doc comments, no code changes
+2. Use /// for items, //! for module header
+3. Be concise but informative
+4. Explain what each item does, its parameters, return values, and any important notes
+5. Match the style and terminology used in the codebase
+6. For the module header, explain the module's role in the overall architecture
+
+OUTPUT FORMAT:
+For each element, output:
+---
+ELEMENT: [type] [name]
+LINE: [line number]
+DOC:
+[doc comment lines, each starting with /// or //!]
+---
+
+Start with the module header (if needed), then document elements in order of appearance.`;
+
+				const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+				const response = await model.sendRequest(messages, {}, token);
+
+				progress.report({ message: 'Applying documentation...', increment: 30 });
+
+				// Collect the response
+				let responseText = '';
+				for await (const chunk of response.text) {
+					if (token.isCancellationRequested) return;
+					responseText += chunk;
+				}
+
+				// Parse the response and apply changes
+				const lines = content.split('\n');
+				const insertions: { line: number; text: string }[] = [];
+
+				// Parse module header if present
+				if (needsHeader) {
+					const headerMatch = responseText.match(/ELEMENT:\s*module\s*header[\s\S]*?DOC:\n([\s\S]*?)(?=---|$)/i);
+					if (headerMatch) {
+						const headerLines = headerMatch[1].trim().split('\n')
+							.filter(l => l.trim().startsWith('//!'))
+							.join('\n');
+						if (headerLines) {
+							insertions.push({ line: 0, text: headerLines + '\n\n' });
+						}
+					}
+				}
+
+				// Parse element documentation
+				const elementRegex = /ELEMENT:\s*(\w+(?:\s+\w+)?)\s+(\w+)\nLINE:\s*(\d+)\nDOC:\n([\s\S]*?)(?=---|$)/gi;
+				let elemMatch;
+				while ((elemMatch = elementRegex.exec(responseText)) !== null) {
+					const lineNum = parseInt(elemMatch[3], 10);
+					const docLines = elemMatch[4].trim().split('\n')
+						.filter(l => l.trim().startsWith('///'))
+						.join('\n');
+					if (docLines && lineNum > 0 && lineNum <= lines.length) {
+						// Get indentation from the target line
+						const targetLine = lines[lineNum - 1];
+						const indent = targetLine.match(/^(\s*)/)?.[1] || '';
+						const indentedDoc = docLines.split('\n').map(l => indent + l.trim()).join('\n');
+						insertions.push({ line: lineNum - 1, text: indentedDoc + '\n' });
+					}
+				}
+
+				// Apply insertions in reverse order (so line numbers stay valid)
+				insertions.sort((a, b) => b.line - a.line);
+				
+				let newContent = content;
+				for (const ins of insertions) {
+					const contentLines = newContent.split('\n');
+					contentLines.splice(ins.line, 0, ins.text.trimEnd());
+					newContent = contentLines.join('\n');
+				}
+
+				// Write the file
+				fs.writeFileSync(filePath, newContent, 'utf-8');
+
+				progress.report({ message: 'Done!', increment: 30 });
+
+				// Refresh tree view and open file
+				cargoTreeProvider.refresh();
+				const doc = await vscode.workspace.openTextDocument(filePath);
+				await vscode.window.showTextDocument(doc);
+
+				vscode.window.showInformationMessage(`Documentation improved! Added ${insertions.length} doc comments.`);
+
+			} catch (error) {
+				if (error instanceof Error && error.message.includes('cancelled')) {
+					return;
+				}
+				console.error('Documentation generation error:', error);
+				vscode.window.showErrorMessage(`Failed to generate documentation: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			}
+		});
+	});
+
+	// Improve Target Documentation command - same as module but for targets
+	register('cargui.improveTargetDocumentation', async (item: CargoTreeItem) => {
+		const target = item.target;
+		if (!target) {
+			vscode.window.showErrorMessage('No target information available');
+			return;
+		}
+
+		const workspaceFolder = deps.getWorkspaceFolder();
+		if (!workspaceFolder) {
+			vscode.window.showErrorMessage('No workspace folder found');
+			return;
+		}
+
+		// Construct the full file path from the relative target path
+		// If the target belongs to a workspace member, include that in the path
+		let basePath = workspaceFolder.uri.fsPath;
+		if (item.workspaceMember) {
+			const members = discoverWorkspaceMembers(workspaceFolder.uri.fsPath);
+			const member = members.find(m => m.name === item.workspaceMember);
+			if (member) {
+				basePath = path.join(workspaceFolder.uri.fsPath, member.path);
+			}
+		}
+		const filePath = path.join(basePath, target.path || '');
+		
+		if (!target.path || !fs.existsSync(filePath)) {
+			vscode.window.showErrorMessage(`File not found: ${filePath}`);
+			return;
+		}
+
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: 'Improving documentation...',
+			cancellable: true
+		}, async (progress, token) => {
+			try {
+				// Select GPT-4o model
+				const models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
+				if (models.length === 0) {
+					vscode.window.showErrorMessage('No GPT-4o model available. Please ensure GitHub Copilot is installed and signed in.');
+					return;
+				}
+				const model = models[0];
+
+				progress.report({ message: 'Analyzing file...', increment: 10 });
+
+				const content = fs.readFileSync(filePath, 'utf-8');
+				const needsHeader = !hasModuleHeader(content);
+				const undocumented = findUndocumentedElements(content);
+
+				if (!needsHeader && undocumented.length === 0) {
+					vscode.window.showInformationMessage('Target is already fully documented!');
+					return;
+				}
+
+				progress.report({ message: 'Gathering context...', increment: 10 });
+
+				const context = await gatherCodebaseContext(filePath, workspaceFolder.uri.fsPath);
+
+				progress.report({ message: 'Generating documentation...', increment: 20 });
+
+				// Build prompt for AI
+				let prompt = `You are a Rust documentation expert. Generate high-quality documentation comments for the following Rust code.
+
+CODEBASE CONTEXT:
+${context}
+
+FILE TO DOCUMENT: ${path.relative(workspaceFolder.uri.fsPath, filePath)}
+${content}
+
+DOCUMENTATION NEEDED:
+`;
+				if (needsHeader) {
+					prompt += `- Module/file header (//!) at the top explaining the ${target.type}'s purpose\n`;
+				}
+				if (undocumented.length > 0) {
+					prompt += `- Documentation (///) for these undocumented elements:\n`;
+					for (const elem of undocumented) {
+						prompt += `  - ${elem.type} \`${elem.name}\` at line ${elem.line}\n`;
+					}
+				}
+
+				prompt += `
+RULES:
+1. Generate ONLY the doc comments, no code changes
+2. Use /// for items, //! for module/file header
+3. Be concise but informative
+4. Explain what each item does, its parameters, return values, and any important notes
+5. Match the style and terminology used in the codebase
+6. For the header, explain this ${target.type}'s role and purpose
+
+OUTPUT FORMAT:
+For each element, output:
+---
+ELEMENT: [type] [name]
+LINE: [line number]
+DOC:
+[doc comment lines, each starting with /// or //!]
+---
+
+Start with the header (if needed), then document elements in order of appearance.`;
+
+				const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+				const response = await model.sendRequest(messages, {}, token);
+
+				progress.report({ message: 'Applying documentation...', increment: 30 });
+
+				// Collect the response
+				let responseText = '';
+				for await (const chunk of response.text) {
+					if (token.isCancellationRequested) return;
+					responseText += chunk;
+				}
+
+				// Parse the response and apply changes
+				const lines = content.split('\n');
+				const insertions: { line: number; text: string }[] = [];
+
+				// Parse module header if present
+				if (needsHeader) {
+					const headerMatch = responseText.match(/ELEMENT:\s*(?:module\s*)?header[\s\S]*?DOC:\n([\s\S]*?)(?=---|$)/i);
+					if (headerMatch) {
+						const headerLines = headerMatch[1].trim().split('\n')
+							.filter(l => l.trim().startsWith('//!'))
+							.join('\n');
+						if (headerLines) {
+							insertions.push({ line: 0, text: headerLines + '\n\n' });
+						}
+					}
+				}
+
+				// Parse element documentation
+				const elementRegex = /ELEMENT:\s*(\w+(?:\s+\w+)?)\s+(\w+)\nLINE:\s*(\d+)\nDOC:\n([\s\S]*?)(?=---|$)/gi;
+				let elemMatch;
+				while ((elemMatch = elementRegex.exec(responseText)) !== null) {
+					const lineNum = parseInt(elemMatch[3], 10);
+					const docLines = elemMatch[4].trim().split('\n')
+						.filter(l => l.trim().startsWith('///'))
+						.join('\n');
+					if (docLines && lineNum > 0 && lineNum <= lines.length) {
+						// Get indentation from the target line
+						const targetLine = lines[lineNum - 1];
+						const indent = targetLine.match(/^(\s*)/)?.[1] || '';
+						const indentedDoc = docLines.split('\n').map(l => indent + l.trim()).join('\n');
+						insertions.push({ line: lineNum - 1, text: indentedDoc + '\n' });
+					}
+				}
+
+				// Apply insertions in reverse order (so line numbers stay valid)
+				insertions.sort((a, b) => b.line - a.line);
+				
+				let newContent = content;
+				for (const ins of insertions) {
+					const contentLines = newContent.split('\n');
+					contentLines.splice(ins.line, 0, ins.text.trimEnd());
+					newContent = contentLines.join('\n');
+				}
+
+				// Write the file
+				fs.writeFileSync(filePath, newContent, 'utf-8');
+
+				progress.report({ message: 'Done!', increment: 30 });
+
+				// Refresh tree view and open file
+				cargoTreeProvider.refresh();
+				const doc = await vscode.workspace.openTextDocument(filePath);
+				await vscode.window.showTextDocument(doc);
+
+				vscode.window.showInformationMessage(`Documentation improved! Added ${insertions.length} doc comments.`);
+
+			} catch (error) {
+				if (error instanceof Error && error.message.includes('cancelled')) {
+					return;
+				}
+				console.error('Documentation generation error:', error);
+				vscode.window.showErrorMessage(`Failed to generate documentation: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			}
+		});
 	});
 
 	return disposables;

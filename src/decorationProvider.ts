@@ -10,7 +10,7 @@ export class DependencyDecorationProvider implements vscode.FileDecorationProvid
     
     private latestDependencies = new Set<string>();
     private inheritedDependencies = new Set<string>(); // Dependencies inherited from workspace
-    private targetColors = new Map<string, string>(); // Map target/rustup name to color
+    private targetColors = new Map<string, string>(); // Map target/rustup/dep name to color
     
     provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
         if (uri.scheme === 'cargui-workspace-deps') {
@@ -18,6 +18,16 @@ export class DependencyDecorationProvider implements vscode.FileDecorationProvid
                 color: new vscode.ThemeColor('charts.orange'),
                 tooltip: 'Workspace Dependencies'
             };
+        }
+        // Check targetColors for cargui-dep FIRST (path-based deps get blue)
+        if (uri.scheme === 'cargui-dep') {
+            const color = this.targetColors.get(uri.path);
+            if (color) {
+                return {
+                    color: new vscode.ThemeColor(color),
+                    tooltip: 'Path-based dependency'
+                };
+            }
         }
         if (uri.scheme === 'cargui-dep' && this.inheritedDependencies.has(uri.path)) {
             return {
@@ -78,12 +88,18 @@ export class DependencyDecorationProvider implements vscode.FileDecorationProvid
         } else {
             this.targetColors.delete(targetName);
         }
-        this._onDidChangeFileDecorations.fire(vscode.Uri.parse(`cargui-target:${targetName}`));
+        // Fire for both target and dep schemes
+        this._onDidChangeFileDecorations.fire([
+            vscode.Uri.parse(`cargui-target:${targetName}`),
+            vscode.Uri.parse(`cargui-dep:${targetName}`)
+        ]);
     }
     
     refresh() {
         this.latestDependencies.clear();
         this.inheritedDependencies.clear();
-        this._onDidChangeFileDecorations.fire(undefined as any);
+        // Don't clear targetColors - they should persist across tree refreshes
+        // Only fire a full refresh if absolutely necessary
+        // this._onDidChangeFileDecorations.fire(undefined as any);
     }
 }

@@ -1,29 +1,47 @@
-# Development files
+# Source and development
+src/**
 .vscode/**
 .vscode-test/**
-src/**
-.gitignore
 tsconfig.json
+.gitignore
+.mocharc.json
 test-package.sh
+TESTING.md
 
-# Demo/test projects - exclude entirely
+# Project internals
+.project/**
+refs/**
+tmp/**
+tmp-*
+AGENTS.md
+
+# Test projects (4GB+!)
 test-projs/**
-vsix/**
 
-# Documentation (keep only essential)
+# Built packages
+vsix/**
+*.vsix
+
+# Git/GitHub
+.git/**
+.github/**
+.DS_Store
+
+# Docs not needed in extension
 CONTRIBUTING.md
 NEXT_STEPS.md
 PUBLISHING_GUIDE.md
 
-# Git and CI
-.github/**
-.git/**
-.DS_Store
-
-# Node development files
+# Node module bloat
 node_modules/**/test/**
 node_modules/**/tests/**
 node_modules/**/*.md
 node_modules/**/LICENSE*
 node_modules/**/.npmignore
 node_modules/**/.github/**
+
+# Exclude compiled tests in out/
+out/test/**
+out/unit/**
+out/**/test/**
+out/**/unit/**

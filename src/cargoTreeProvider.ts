@@ -1644,10 +1644,10 @@ export class CargoTreeDataProvider implements
                 });
                 // Color the star icon orange
                 workspaceItem.iconPath = new vscode.ThemeIcon('star-full', new vscode.ThemeColor('charts.orange'));
-                const checkedCount = dependencies.workspace.filter(d => this.checkedDependencies.has(d.name)).length;
+                const checkedCount = dependencies.workspace.filter(d => this.checkedDependencies.has(`workspace:${d.name}`)).length;
                 workspaceItem.description = `${dependencies.workspace.length}${checkedCount > 0 ? ` ✓${checkedCount}` : ''}`;
                 if (checkedCount > 0) {
-                    const checkedDeps = dependencies.workspace.filter(d => this.checkedDependencies.has(d.name)).map(d => d.name);
+                    const checkedDeps = dependencies.workspace.filter(d => this.checkedDependencies.has(`workspace:${d.name}`)).map(d => d.name);
                     workspaceItem.tooltip = `Selected workspace dependencies:\n${checkedDeps.join('\n')}`;
                 }
                 // Color workspace category orange
@@ -1661,10 +1661,10 @@ export class CargoTreeDataProvider implements
                     iconName: 'package',
                     categoryName: 'production'
                 });
-                const checkedCount = dependencies.production.filter(d => this.checkedDependencies.has(d.name)).length;
+                const checkedCount = dependencies.production.filter(d => this.checkedDependencies.has(`production:${d.name}`)).length;
                 productionItem.description = `${dependencies.production.length}${checkedCount > 0 ? ` ✓${checkedCount}` : ''}`;
                 if (checkedCount > 0) {
-                    const checkedDeps = dependencies.production.filter(d => this.checkedDependencies.has(d.name)).map(d => d.name);
+                    const checkedDeps = dependencies.production.filter(d => this.checkedDependencies.has(`production:${d.name}`)).map(d => d.name);
                     productionItem.tooltip = `Selected production dependencies:\n${checkedDeps.join('\n')}`;
                 }
                 items.push(productionItem);
@@ -1676,10 +1676,10 @@ export class CargoTreeDataProvider implements
                     iconName: 'beaker',
                     categoryName: 'dev'
                 });
-                const checkedCount = dependencies.dev.filter(d => this.checkedDependencies.has(d.name)).length;
+                const checkedCount = dependencies.dev.filter(d => this.checkedDependencies.has(`dev:${d.name}`)).length;
                 devItem.description = `${dependencies.dev.length}${checkedCount > 0 ? ` ✓${checkedCount}` : ''}`;
                 if (checkedCount > 0) {
-                    const checkedDeps = dependencies.dev.filter(d => this.checkedDependencies.has(d.name)).map(d => d.name);
+                    const checkedDeps = dependencies.dev.filter(d => this.checkedDependencies.has(`dev:${d.name}`)).map(d => d.name);
                     devItem.tooltip = `Selected dev dependencies:\n${checkedDeps.join('\n')}`;
                 }
                 items.push(devItem);
@@ -1691,10 +1691,10 @@ export class CargoTreeDataProvider implements
                     iconName: 'tools',
                     categoryName: 'build'
                 });
-                const checkedCount = dependencies.build.filter(d => this.checkedDependencies.has(d.name)).length;
+                const checkedCount = dependencies.build.filter(d => this.checkedDependencies.has(`build:${d.name}`)).length;
                 buildItem.description = `${dependencies.build.length}${checkedCount > 0 ? ` ✓${checkedCount}` : ''}`;
                 if (checkedCount > 0) {
-                    const checkedDeps = dependencies.build.filter(d => this.checkedDependencies.has(d.name)).map(d => d.name);
+                    const checkedDeps = dependencies.build.filter(d => this.checkedDependencies.has(`build:${d.name}`)).map(d => d.name);
                     buildItem.tooltip = `Selected build dependencies:\n${checkedDeps.join('\n')}`;
                 }
                 items.push(buildItem);
@@ -2062,11 +2062,14 @@ export class CargoTreeDataProvider implements
                     item.workspaceMember = this.selectedWorkspaceMember;
                 }
                 
+                // Use unique key that includes target type to avoid conflicts (lib and bin can have same name)
+                const targetKey = `${target.type}:${target.name}`;
+                
                 // Set resourceUri for file decoration (enables text coloring for health status)
                 // Use different scheme for yellow validation to enable conditional resolve button
                 // Auto-discovered targets use normal scheme (only icon is affected, not text)
                 const scheme = targetStatus.color === 'charts.yellow' ? 'cargui-target-yellow' : 'cargui-target';
-                item.resourceUri = vscode.Uri.parse(`${scheme}:${target.name}`);
+                item.resourceUri = vscode.Uri.parse(`${scheme}:${targetKey}`);
                 
                 // Debug log for yellow targets
                 if (targetStatus.color === 'charts.yellow') {
@@ -2075,7 +2078,7 @@ export class CargoTreeDataProvider implements
                 
                 // Apply health color via decoration provider (for text color)
                 if (this.decorationProvider) {
-                    this.decorationProvider.setTargetColor(target.name, healthColor);
+                    this.decorationProvider.setTargetColor(targetKey, healthColor);
                 }
                 
                 // We apply icon color based ONLY on validation status - health colors only affect text
@@ -2088,7 +2091,7 @@ export class CargoTreeDataProvider implements
                     item.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('terminal.ansiBrightYellow'));
                     // Also set text color to bright yellow via decoration provider
                     if (this.decorationProvider) {
-                        this.decorationProvider.setTargetColor(target.name, 'terminal.ansiBrightYellow');
+                        this.decorationProvider.setTargetColor(targetKey, 'terminal.ansiBrightYellow');
                     }
                 } else if (targetStatus.color) {
                     // Use warning triangle icon for yellow validation issues
@@ -2204,7 +2207,12 @@ export class CargoTreeDataProvider implements
                 let iconColor: vscode.ThemeColor | undefined = undefined;
                 
                 // Workspace dependencies get orange coloring
-                if (depType === 'workspace') {
+                // Path-based dependencies get blue coloring (local crates)
+                if (dep.path) {
+                    iconColor = new vscode.ThemeColor('charts.blue');
+                }
+                // Workspace dependencies get orange coloring
+                else if (depType === 'workspace') {
                     iconColor = new vscode.ThemeColor('charts.orange');
                 }
                 
@@ -2215,11 +2223,15 @@ export class CargoTreeDataProvider implements
                     iconColor = new vscode.ThemeColor('charts.orange');
                 }
                 
+                // Create unique dependency key including type to avoid collisions
+                // (same dep name can appear in multiple categories: prod, dev, build, workspace)
+                const depKey = `${depType}:${dep.name}`;
+                
                 const item = new CargoTreeItem(
                     label,
                     vscode.TreeItemCollapsibleState.None,
                     TreeItemContext.Dependency,
-                    { dependency: dep, iconName: iconName }
+                    { dependency: dep, dependencyKey: depKey, iconName: iconName }
                 );
                 
                 // Apply orange icon color to workspace dependencies and inherited deps
@@ -2239,15 +2251,19 @@ export class CargoTreeDataProvider implements
                 };
                 
                 // Set resourceUri for file decoration (enables text coloring)
-                item.resourceUri = vscode.Uri.parse(`cargui-dep:${dep.name}`);
+                item.resourceUri = vscode.Uri.parse(`cargui-dep:${depKey}`);
                 
-                // Mark as latest in decoration provider if applicable
-                if (isLatest && this.decorationProvider) {
-                    this.decorationProvider.markAsLatest(dep.name);
+                // Path-based dependencies get blue text (no version to check)
+                if (dep.path && this.decorationProvider) {
+                    this.decorationProvider.setTargetColor(depKey, 'charts.blue');
+                }
+                // Mark as latest in decoration provider if applicable (versioned deps only)
+                else if (isLatest && this.decorationProvider) {
+                    this.decorationProvider.markAsLatest(depKey);
                 }
                 
-                // Make dependencies checkable
-                const isChecked = this.checkedDependencies.has(dep.name);
+                // Make dependencies checkable using the unique key
+                const isChecked = this.checkedDependencies.has(depKey);
                 item.checkboxState = isChecked 
                     ? vscode.TreeItemCheckboxState.Checked 
                     : vscode.TreeItemCheckboxState.Unchecked;

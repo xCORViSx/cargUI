@@ -20,12 +20,20 @@ export function detectModules(srcPath: string): ModuleInfo[] {
     const modules: ModuleInfo[] = [];
     const declaredModules = new Set<string>();
     
-    // Check for main.rs or lib.rs to find mod declarations
+    // Check BOTH main.rs and lib.rs for mod declarations
+    // A crate can have both a library (lib.rs) and a binary (main.rs)
     const mainPath = path.join(srcPath, 'main.rs');
     const libPath = path.join(srcPath, 'lib.rs');
-    const rootFile = fs.existsSync(mainPath) ? mainPath : (fs.existsSync(libPath) ? libPath : null);
+    const rootFiles: string[] = [];
     
-    if (rootFile) {
+    if (fs.existsSync(libPath)) {
+        rootFiles.push(libPath);
+    }
+    if (fs.existsSync(mainPath)) {
+        rootFiles.push(mainPath);
+    }
+    
+    for (const rootFile of rootFiles) {
         // Parse root file for mod declarations
         const content = fs.readFileSync(rootFile, 'utf8');
         const modRegex = /^\s*(pub\s+)?mod\s+(\w+)\s*;/gm;
@@ -34,17 +42,20 @@ export function detectModules(srcPath: string): ModuleInfo[] {
         while ((match = modRegex.exec(content)) !== null) {
             const isPub = !!match[1];
             const modName = match[2];
-            declaredModules.add(modName);
-            const modInfo = findModuleFile(srcPath, modName, true, isPub);
-            if (modInfo) {
-                modules.push(modInfo);
+            // Only add if not already declared (avoid duplicates if both files declare same module)
+            if (!declaredModules.has(modName)) {
+                declaredModules.add(modName);
+                const modInfo = findModuleFile(srcPath, modName, true, isPub);
+                if (modInfo) {
+                    modules.push(modInfo);
+                }
             }
         }
-        
-        // Now scan for undeclared modules (files that exist but aren't declared)
-        const undeclaredModules = findUndeclaredModules(srcPath, declaredModules);
-        modules.push(...undeclaredModules);
     }
+    
+    // Now scan for undeclared modules (files that exist but aren't declared)
+    const undeclaredModules = findUndeclaredModules(srcPath, declaredModules);
+    modules.push(...undeclaredModules);
     
     return modules;
 }

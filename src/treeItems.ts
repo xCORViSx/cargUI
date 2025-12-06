@@ -16,6 +16,7 @@ export interface CargoTreeItemOptions {
     workspaceMember?: string;
     categoryName?: string;  // For argument subcategories and dependency types
     dependency?: Dependency;  // For dependency items
+    dependencyKey?: string;  // Unique key for dependencies (depType:depName) to avoid collisions
     modules?: ModuleInfo[];  // For module member items
     moduleInfo?: ModuleInfo;  // For module items with children
     unknownData?: UnregisteredItem;  // For unknown target items
@@ -35,6 +36,7 @@ export class CargoTreeItem extends vscode.TreeItem {
     public workspaceMember?: string;
     public categoryName?: string;
     public dependency?: Dependency;
+    public dependencyKey?: string; // Unique key: "depType:depName" for dependencies
     public modules?: ModuleInfo[];
     public moduleInfo?: ModuleInfo;
     public unknownData?: UnregisteredItem;
@@ -60,6 +62,7 @@ export class CargoTreeItem extends vscode.TreeItem {
             this.workspaceMember = options.workspaceMember;
             this.categoryName = options.categoryName;
             this.dependency = options.dependency;
+            this.dependencyKey = options.dependencyKey;
             this.modules = options.modules;
             this.moduleInfo = options.moduleInfo;
             this.unknownData = options.unknownData;
