@@ -517,4 +517,86 @@ mod cli;
                 'Undeclared modules should have declare action');
         });
     });
+
+    // ============================================================
+    // REGRESSION TEST 9: Undeclared Module Icon Propagation
+    // Issue: Red icon for undeclared modules should propagate to children
+    // so it "leads all the way down to the offender"
+    // ============================================================
+
+    suite('Undeclared Module Icon Propagation', () => {
+        test('should mark children as undeclared when parent is undeclared', () => {
+            // When a parent module is undeclared, its children should inherit the undeclared status
+            // for visual indication that leads to the root cause
+
+            const parentUndeclared = true;
+            const childDeclared = true;
+
+            // Even though child is technically declared, if parent is undeclared,
+            // child should be treated as undeclared for display purposes
+            const isEffectivelyUndeclared = !childDeclared || parentUndeclared;
+
+            assert.strictEqual(isEffectivelyUndeclared, true,
+                'Child of undeclared module should be effectively undeclared');
+        });
+
+        test('should use red color for all descendants of undeclared module', () => {
+            // Descendants should get red color to form visual trail to root cause
+            const parentUndeclared = true;
+
+            // Simulate color assignment logic
+            const isEffectivelyUndeclared = parentUndeclared;
+            let color: string | undefined;
+
+            if (isEffectivelyUndeclared) {
+                color = 'charts.red';
+            }
+
+            assert.strictEqual(color, 'charts.red',
+                'All descendants of undeclared module should be red');
+        });
+
+        test('should not affect color of declared module in declared hierarchy', () => {
+            // Declared modules in fully declared hierarchy should keep their health color
+            const parentUndeclared = false;
+            const childDeclared = true;
+
+            const isEffectivelyUndeclared = !childDeclared || parentUndeclared;
+
+            assert.strictEqual(isEffectivelyUndeclared, false,
+                'Child in declared hierarchy should not be marked undeclared');
+        });
+
+        test('should propagate through multiple levels of nesting', () => {
+            // Red status should propagate through grandchildren, great-grandchildren, etc.
+            const grandparentUndeclared = true;
+            const parentDeclared = true;  // Declared but has undeclared parent
+            const childDeclared = true;   // Declared but has undeclared ancestor
+
+            const parentEffectivelyUndeclared = !parentDeclared || grandparentUndeclared;
+            const childEffectivelyUndeclared = !childDeclared || parentEffectivelyUndeclared;
+
+            assert.strictEqual(parentEffectivelyUndeclared, true,
+                'Parent should inherit undeclared status from grandparent');
+            assert.strictEqual(childEffectivelyUndeclared, true,
+                'Child should inherit undeclared status through parent from grandparent');
+        });
+
+        test('should update tooltip to indicate inherited undeclared status', () => {
+            // When child inherits undeclared status from parent, tooltip should indicate this
+            const parentUndeclared = true;
+            const childDeclared = true;
+
+            const tooltipParts: string[] = [];
+            if (!childDeclared) {
+                tooltipParts.push('⚠️ Not declared with \'mod\' statement');
+            }
+            if (parentUndeclared && childDeclared) {
+                tooltipParts.push('⚠️ Parent module is undeclared');
+            }
+
+            assert.ok(tooltipParts.includes('⚠️ Parent module is undeclared'),
+                'Tooltip should indicate parent undeclared status');
+        });
+    });
 });

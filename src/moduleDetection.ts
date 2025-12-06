@@ -383,13 +383,16 @@ function calculateModuleHealth(moduleInfo: ModuleInfo): { percentage: number; co
 
 /**
  * Builds a tree of CargoTreeItem objects from ModuleInfo array for display in VS Code tree view.
+ * Propagates "undeclared" status to all descendants so if parent is undeclared,
+ * all children show red icons to "lead all the way down to the offender".
  * 
  * @param modules - Array of ModuleInfo objects to convert
  * @param workspaceMember - Optional workspace member path
  * @param decorationProvider - Optional decoration provider for styling undeclared modules
+ * @param parentUndeclared - Whether parent module is undeclared (propagates to children)
  * @returns Array of CargoTreeItem objects ready for tree view
  */
-export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string, decorationProvider?: DependencyDecorationProvider): CargoTreeItem[] {
+export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string, decorationProvider?: DependencyDecorationProvider, parentUndeclared: boolean = false): CargoTreeItem[] {
     return modules.map(mod => {
         const hasChildren = mod.children.length > 0;
         
@@ -414,8 +417,15 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
         // Build comprehensive tooltip
         let tooltipParts: string[] = [mod.path];
         
+        // Determine if this module should be marked as undeclared for display purposes
+        // This includes both truly undeclared modules and those descended from undeclared parents
+        const isEffectivelyUndeclared = !mod.isDeclared || parentUndeclared;
+        
         if (!mod.isDeclared) {
             tooltipParts.push('⚠️ Not declared with \'mod\' statement');
+        }
+        if (parentUndeclared && mod.isDeclared) {
+            tooltipParts.push('⚠️ Parent module is undeclared');
         }
         if (!mod.isPublic) {
             tooltipParts.push('🔒 Private module');
@@ -478,8 +488,9 @@ export function buildModuleTree(modules: ModuleInfo[], workspaceMember?: string,
         let color: string | undefined;
         const moduleKey = `module-${mod.name}-${mod.path}`;
         
-        if (!mod.isDeclared) {
-            // Red: Undeclared modules (not declared with mod statement)
+        if (isEffectivelyUndeclared) {
+            // Red: Undeclared modules or children of undeclared modules
+            // This creates a visual "trail" down to the root cause
             color = 'charts.red';
             // we set a special resourceUri for undeclared modules so inline buttons appear
             item.resourceUri = vscode.Uri.parse(`cargui-undeclared-module:${moduleKey}`);

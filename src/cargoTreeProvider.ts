@@ -1259,7 +1259,9 @@ export class CargoTreeDataProvider implements
             // Module children - show submodules
             const moduleInfo = element.moduleInfo!;
             const workspaceMember = element.workspaceMember;
-            return Promise.resolve(buildModuleTree(moduleInfo.children, workspaceMember, this.decorationProvider));
+            // Propagate "undeclared" status to children so they show red all the way down
+            const isParentUndeclared = !moduleInfo.isDeclared;
+            return Promise.resolve(buildModuleTree(moduleInfo.children, workspaceMember, this.decorationProvider, isParentUndeclared));
         } else if (element.contextValue === TreeItemContext.SnapshotsCategory) {
             // SNAPSHOTS category children
             const config = vscode.workspace.getConfiguration('cargui');
