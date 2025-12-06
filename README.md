@@ -15,12 +15,12 @@ Works seamlessly in **VS Code** and **Cursor**!
 
 cargUI is a **visual Rust development companion** covering:
 
-- [^1]**🎨 Package organization** - Smart detection, visualization, and management of various Rust package elements
-- [^2]**⚙️ Cargo integration** - Visual interface for all Cargo commands and features  
-- [^3]**🦀 Rust toolchain** - Rustup integration and toolchain management
-- [^4]**📦 Workspace support** - Intelligent multi-crate workspace handling
-- [^5]**🔍 Health indications** - for the stability and quality of modules and dependencies
-- [^6]**📸 Configuration** - Snapshots for different development scenarios
+- <!--[^1]--> **🎨 Package organization** - Smart detection, visualization, and management of various Rust package elements
+- <!--[^2]--> **⚙️ Cargo integration** - Visual interface for all Cargo commands and features  
+- <!--[^3]--> **🦀 Rust toolchain** - Rustup integration and toolchain management
+- <!--[^4]--> **📦 Workspace support** - Intelligent multi-crate workspace handling
+- <!--[^5]--> **🔍 Health indications** - for the stability and quality of modules and dependencies
+- <!--[^6]--> **📸 Configuration** - Snapshots for different development scenarios
 
 ### Why cargUI?
 
@@ -61,13 +61,13 @@ cargUI is a **visual Rust development companion** covering:
 
 **Automatically finds:**
 
-- [^7]Unregistered `.rs` files anywhere in `src/`
-- [^8]`#[cfg(feature = "...")]` attributes not declared in `[features]`
-- [^9]Files that should be binaries, examples, tests, or benchmarks
+- <!--[^7]--> Unregistered `.rs` files anywhere in `src/`
+- <!--[^8]--> `#[cfg(feature = "...")]` attributes not declared in `[features]`
+- <!--[^9]--> Files that should be binaries, examples, tests, or benchmarks
 
 **Smart filtering:**
 
-- [^10]Skips helper modules (checks for `mod`, `use`, `include!` statements)
+- <!--[^10]--> Skips helper modules (checks for `mod`, `use`, `include!` statements)
 - Only shows truly orphaned files
 - No false positives from utility code
 
@@ -83,10 +83,10 @@ cargUI is a **visual Rust development companion** covering:
 
 | Target Type | Conventional Directory | Auto-Move Option |
 |-------------|------------------------|------------------|
-| [^11]Binary      | `src/bin/`            | ✅ Yes           |
-| [^11]Example     | `examples/`           | ✅ Yes           |
-| [^11]Test        | `tests/`              | ✅ Yes           |
-| [^11]Benchmark   | `benches/`            | ✅ Yes           |
+| <!--[^11]-->Binary      | `src/bin/`            | ✅ Yes           |
+| <!--[^11]-->Example     | `examples/`           | ✅ Yes           |
+| <!--[^11]-->Test        | `tests/`              | ✅ Yes           |
+| <!--[^11]-->Benchmark   | `benches/`            | ✅ Yes           |
 
 Follows Rust best practices automatically!
 
@@ -97,17 +97,17 @@ Follows Rust best practices automatically!
 
 **Color-coded modules:**
 
-- [^100]🔴 **Red text** = Undeclared module (missing `mod` declaration) - cascades down entire subtree
-- [^101]🟢 **Green text** = Excellent health (90-100% documented)
-- [^102]🔵 **Blue text** = Good health (50-90% documented)
+- 🔴 **Red text** = Undeclared module (missing `mod` declaration) - cascades down entire subtree <!-- src/moduleDetection.ts:buildModuleTree:482-502 - Red color applied to modules where !isDeclared || parentUndeclared, cascading through entire subtree -->
+- 🟢 **Green text** = Excellent health (90-100% documented) <!-- src/targetHealth.ts:calculateTargetHealthColor - Returns charts.green for modules with 90-100% documented code elements -->
+- 🔵 **Blue text** = Good health (50-90% documented) <!-- src/targetHealth.ts:calculateTargetHealthColor - Returns charts.blue for modules with 50-90% documented code elements -->
 - ⚪ **Default/no color** = Module needs documentation (< 50% documented)
 
 **Module health calculation (v1.0.8+):**
 
-- [^14]Counts individual code elements: functions, structs, enums, traits, types, constants, statics
-- [^15]Checks each element for preceding `///` or `//!` doc comments
+- <!--[^14]--> Counts individual code elements: functions, structs, enums, traits, types, constants, statics
+- <!--[^15]--> Checks each element for preceding `///` or `//!` doc comments
 - **Module header (`//!`) counts as 1 item** (v1.2.0) - Now required for 100% health
-- [^16]Shows percentage: "75% (6/8 elements)" in tooltip
+- <!--[^16]--> Shows percentage: "75% (6/8 elements)" in tooltip
 - Element-based (not file-level) for accurate documentation tracking
 - **Privateness has no bearing on health** (v1.1.2) - Color based solely on documentation percentage
 
@@ -125,10 +125,10 @@ Follows Rust best practices automatically!
 - Visibility: Private modules show **(priv)** indicator (v1.1.2)
 - Documentation percentage with element counts
 - Header status: Shows "📋 Has module header (//!)" or "Missing header (//!)" in tooltip (v1.2.0)
-- [^17]Test presence (`#[test]`, `#[cfg(test)]`)
+- <!--[^17]--> Test presence (`#[test]`, `#[cfg(test)]`)
 - Directory vs single-file modules
 - Hierarchical structure
-- [^18]**Module counts** - Shows direct children count at all nesting levels
+- <!--[^18]--> **Module counts** - Shows direct children count at all nesting levels
 
 **Module declaration (v1.1.2):**
 
@@ -139,7 +139,7 @@ Follows Rust best practices automatically!
 
 **Context-aware display:**
 
-- [^19]When a workspace member is selected, shows only that member's modules
+- <!--[^19]--> When a workspace member is selected, shows only that member's modules
 - Automatically switches context when you select different workspace members
 - Clear separation of concerns in multi-crate packages
 
@@ -153,8 +153,8 @@ Follows Rust best practices automatically!
 
 **Color-coded dependencies:**
 
-- [^20] 🟢 **Green text** = Latest version (up to date!)
-- [^21] ⭐ **Yellow star icon** = Workspace-inherited dependency (v1.0.5)
+- <!--[^20]--> 🟢 **Green text** = Latest version (up to date!)
+- <!--[^21]--> ⭐ **Yellow star icon** = Workspace-inherited dependency (v1.0.5)
 - 📦 **Package icon** = Standard dependency with version number shown
 
 **Organized by type:**
@@ -166,15 +166,15 @@ Follows Rust best practices automatically!
 
 **Workspace-inherited dependencies (v1.0.5):**
 
-- [^23] Dependencies with `{ workspace = true }` display with yellow star icons
-- [^24] Show correct version numbers resolved from workspace
+- <!--[^23]--> Dependencies with `{ workspace = true }` display with yellow star icons
+- <!--[^24]--> Show correct version numbers resolved from workspace
 - Sorted to the top of their category for easy identification
-- [^25] Tooltip shows "(from workspace)" origin
+- <!--[^25]--> Tooltip shows "(from workspace)" origin
 - Click to navigate to workspace root `Cargo.toml`
 
 **Version change resilience (v1.0.5):**
 
-- [^26] **Selective reversion** - Only failed updates revert, successful ones persist
+- <!--[^26]--> **Selective reversion** - Only failed updates revert, successful ones persist
 - **Duplicate resolution** - Automatically removes ambiguous dependency constraints
 - **Lock file refresh** - Cleans `Cargo.lock` before updates for reliable resolution
 - **Clear feedback** - Shows which dependencies succeeded vs failed
@@ -183,10 +183,10 @@ Follows Rust best practices automatically!
 
 **Auto-format Cargo.toml (v1.1.0):**
 
-- [^28] Automatically formats `Cargo.toml` after edits (adding dependencies, declaring features/targets)
-- [^29] Shows notification with "Undo" button to revert formatting
-- [^30] "Disable Auto-Formatting" button with re-enable option
-- [^31] Configurable via `cargui.autoFormatCargoToml` setting (default: true)
+- <!--[^28]--> Automatically formats `Cargo.toml` after edits (adding dependencies, declaring features/targets)
+- <!--[^29]--> Shows notification with "Undo" button to revert formatting
+- <!--[^30]--> "Disable Auto-Formatting" button with re-enable option
+- <!--[^31]--> Configurable via `cargui.autoFormatCargoToml` setting (default: true)
 - Preserves file content while improving readability
 
 </details>
@@ -201,24 +201,24 @@ Follows Rust best practices automatically!
 
 **Auto-discovers:**
 
-- [^32] `src/lib.rs` - Library target ⭐
-- [^33] `src/main.rs` - Main binary ⭐
-- [^34] `src/bin/*.rs` - Additional binaries
-- [^35] `examples/*.rs` - Example programs
-- [^36] `tests/*.rs` - Integration tests
-- [^37] `benches/*.rs` - Benchmarks
-- [^38] `[lib]` section in Cargo.toml - Custom library configurations
+- <!--[^32]--> `src/lib.rs` - Library target ⭐
+- <!--[^33]--> `src/main.rs` - Main binary ⭐
+- <!--[^34]--> `src/bin/*.rs` - Additional binaries
+- <!--[^35]--> `examples/*.rs` - Example programs
+- <!--[^36]--> `tests/*.rs` - Integration tests
+- <!--[^37]--> `benches/*.rs` - Benchmarks
+- <!--[^38]--> `[lib]` section in Cargo.toml - Custom library configurations
 
 **Primary targets (⭐):**
 
-- [^39] Main binary (`src/main.rs`) and library (`src/lib.rs`) targets are marked with a star icon
+- <!--[^39]--> Main binary (`src/main.rs`) and library (`src/lib.rs`) targets are marked with a star icon
 - Auto-selected when no targets are checked
 - Keyboard shortcuts work with library-only crates!
 - Both receive identical special treatment and features
 
 **Batch target registration (v1.1.0):**
 
-- [^40] **Inline button** on Unknowns folder to register all at once
+- <!--[^40]--> **Inline button** on Unknowns folder to register all at once
 - Interactive quickpick shows inferred type (based on location/icon)
 - Progress indicator: "Register target_name [path] (1/5)"
 - Cancellable at any point during workflow
@@ -226,8 +226,8 @@ Follows Rust best practices automatically!
 
 **Target validation (v1.1.0):**
 
-- [^41] Validates name-to-filename matching for all target types
-- [^42] Checks directory correctness (binary in examples/ → yellow warning)
+- <!--[^41]--> Validates name-to-filename matching for all target types
+- <!--[^42]--> Checks directory correctness (binary in examples/ → yellow warning)
 - Intelligent hyphen/underscore handling (Cargo treats as equivalent)
 - Specific tooltip messages explain validation failures
 - **Resolve button** (🔧) - Click wrench icon on yellow targets to auto-fix issues:
@@ -311,11 +311,11 @@ database = ["sqlx"]
 
 **Undeclared feature detection (v1.1.0):**
 
-- [^47] Scans code for `#[cfg(feature = "...")]` attributes
-- [^48] Shows undeclared features in red with "Declare Feature" context menu
-- [^49] **Inline button** on Features category to declare all at once
-- [^50] Right-click individual features to declare them with empty array `[]`
-- [^51] Features category icon turns red when undeclared features exist
+- <!--[^47]--> Scans code for `#[cfg(feature = "...")]` attributes
+- <!--[^48]--> Shows undeclared features in red with "Declare Feature" context menu
+- <!--[^49]--> **Inline button** on Features category to declare all at once
+- <!--[^50]--> Right-click individual features to declare them with empty array `[]`
+- <!--[^51]--> Features category icon turns red when undeclared features exist
 
 **Usage:**
 
@@ -807,51 +807,53 @@ cargUI/
 
 ---
 
-## 📚 Footnote Definitions
-
-[^1]: src/smartDetection.ts:detectUnregisteredTargets, detectUndeclaredFeatures - Automatically detects unregistered .rs files and undeclared features
-[^2]: src/cargoCommands.ts:buildWithFeature, runCargoTarget, runCargoCommandOnTargets - Provides visual interface for executing cargo commands with customizable flags, features, and environment variables
-[^3]: src/rustup.ts:getRustToolchains, getDefaultToolchain, setDefaultToolchain - Integrates with rustup to display and switch Rust toolchains
-[^4]: src/cargoDiscovery.ts:discoverWorkspaceMembers, discoverCargoTargets - Discovers and displays multi-crate workspace members with intelligent hierarchy
-[^5]: src/targetHealth.ts:calculateTargetHealthColor, analyzeTargetFile - Analyzes code documentation percentage (functions, structs, traits, etc.) and assigns health colors
-[^6]: src/defaultConfig.ts:updateDefaultConfigurationIfNeeded - Manages snapshot configurations for different development scenarios
-[^7]: src/smartDetection.ts:detectUnregisteredTargets - Scans src/ directory for undeclared .rs files and identifies ones not referenced in Cargo.toml
-[^8]: src/smartDetection.ts:detectUndeclaredFeatures - Finds #[cfg(feature = "...")] attributes in source code not declared in [features] section
-[^9]: src/smartDetection.ts:detectUnregisteredTargets - Classifies orphaned files as binaries, examples, tests, or benchmarks based on file location patterns
-[^10]: src/smartDetection.ts:findReferencedModules - Checks for mod declarations, use statements, and include! macros to filter out helper modules from detection
-[^11]: src/cargoToml.ts:moveTargetToStandardLocation - Moves files to conventional directories (src/bin/, examples/, tests/, benches/) for proper target organization
-[^14]: src/targetHealth.ts:analyzeTargetFile - Counts distinct code elements (functions, structs, enums, traits, type aliases, constants, statics) for accurate documentation tracking
-[^15]: src/targetHealth.ts:analyzeTargetFile - Searches each code element for preceding /// or //! doc comments in the source file
-[^16]: src/cargoTreeProvider.ts:buildTargetTreeItems - Displays percentage calculation as "X% (N/M elements)" in tree item tooltips
-[^17]: src/cargoTreeProvider.ts:buildModuleTree - Scans module file for #[test] and #[cfg(test)] attributes to indicate test presence
-[^18]: src/cargoTreeProvider.ts:buildModuleTree - Counts direct children of each module and displays count in tree item label
-[^19]: src/cargoTreeProvider.ts:refresh - Filters module and target display based on selectedWorkspaceMember configuration value
-[^20]: src/decorationProvider.ts:provideFileDecoration - Applies green color to dependencies marked as latest via markAsLatest()
-[^21]: src/decorationProvider.ts:markAsInherited - Applies yellow star icon to dependencies with workspace = true via parseWorkspaceDependencies
-[^23]: src/cargoDiscovery.ts:discoverCargoDependencies - Reads { workspace = true } entries and resolves versions from [workspace.dependencies]
-[^24]: src/cargoDiscovery.ts:discoverCargoDependencies - Extracts version numbers from workspace.dependencies and displays in dependency list
-[^25]: src/cargoTreeProvider.ts:buildDependencyTreeItems - Adds "(from workspace)" text to tooltip when dependency.inherited is true
-[^26]: src/cargoToml.ts:updateDependencyVersions - Updates only successfully fetched versions; keeps original version if fetch fails
-[^28]: src/cargoToml.ts:applyCargoTomlChanges - Calls formatCargoTomlFile() after applying target/feature changes
-[^29]: src/extension.ts - Shows information notification with "Undo" button after auto-formatting completes
-[^30]: src/extension.ts - Provides "Disable Auto-Formatting" button in notification to toggle cargui.autoFormatCargoToml setting
-[^31]: src/defaultConfig.ts - Reads cargui.autoFormatCargoToml configuration value to enable/disable auto-formatting behavior
-[^32]: src/cargoDiscovery.ts:discoverCargoTargets - Checks for src/lib.rs file and adds library target if found
-[^33]: src/cargoDiscovery.ts:discoverCargoTargets - Checks for src/main.rs file and adds main binary target if found
-[^34]: src/cargoDiscovery.ts:discoverCargoTargets - Scans src/bin/ directory and auto-discovers binary targets not explicitly declared
-[^35]: src/cargoDiscovery.ts:discoverCargoTargets - Scans examples/ directory and auto-discovers example targets
-[^36]: src/cargoDiscovery.ts:discoverCargoTargets - Scans tests/ directory and auto-discovers integration test targets
-[^37]: src/cargoDiscovery.ts:discoverCargoTargets - Scans benches/ directory and auto-discovers benchmark targets
-[^38]: src/cargoDiscovery.ts:discoverCargoTargets - Parses [[lib]] section in Cargo.toml for custom library configurations
-[^39]: src/cargoTreeProvider.ts:buildTargetTreeItems - Marks src/main.rs and src/lib.rs with star icon indicator
-[^40]: src/cargoTreeProvider.ts - Displays "Register All" button in Unknowns tree item when undeclared targets exist
-[^41]: src/smartDetection.ts:detectUnregisteredTargets, analyzeTarget - Checks target name matches filename (e.g., target "foo" expects foo.rs or foo/mod.rs)
-[^42]: src/smartDetection.ts:analyzeTarget - Validates that binary targets are in src/bin/, example targets in examples/, etc.
-[^48]: src/cargoTreeProvider.ts:buildFeatureTreeItems - Displays undeclared features in red color scheme with "Declare Feature" context menu option
-[^51]: src/cargoTreeProvider.ts - Changes Features category icon to red when undeclaredFeatures array has entries
-[^100]: src/moduleDetection.ts:buildModuleTree:482-502 - Red color applied to modules where !isDeclared || parentUndeclared, cascading through entire subtree
-[^101]: src/targetHealth.ts:calculateTargetHealthColor - Returns charts.green for modules with 90-100% documented code elements
-[^102]: src/targetHealth.ts:calculateTargetHealthColor - Returns charts.blue for modules with 50-90% documented code elements
+<!-- FOOTNOTE DEFINITIONS (Developer Reference - Not rendered in markdown) -->
+<!-- [^1]: src/smartDetection.ts:detectUnregisteredTargets, detectUndeclaredFeatures - Automatically detects unregistered .rs files and undeclared features -->
+<!-- [^2]: src/cargoCommands.ts:buildWithFeature, runCargoTarget, runCargoCommandOnTargets - Provides visual interface for executing cargo commands with customizable flags, features, and environment variables -->
+<!-- [^3]: src/rustup.ts:getRustToolchains, getDefaultToolchain, setDefaultToolchain - Integrates with rustup to display and switch Rust toolchains -->
+<!-- [^4]: src/cargoDiscovery.ts:discoverWorkspaceMembers, discoverCargoTargets - Discovers and displays multi-crate workspace members with intelligent hierarchy -->
+<!-- [^5]: src/targetHealth.ts:calculateTargetHealthColor, analyzeTargetFile - Analyzes code documentation percentage (functions, structs, traits, etc.) and assigns health colors -->
+<!-- [^6]: src/defaultConfig.ts:updateDefaultConfigurationIfNeeded - Manages snapshot configurations for different development scenarios -->
+<!-- [^7]: src/smartDetection.ts:detectUnregisteredTargets - Scans src/ directory for undeclared .rs files and identifies ones not referenced in Cargo.toml -->
+<!-- [^8]: src/smartDetection.ts:detectUndeclaredFeatures - Finds #[cfg(feature = "...")] attributes in source code not declared in [features] section -->
+<!-- [^9]: src/smartDetection.ts:detectUnregisteredTargets - Classifies orphaned files as binaries, examples, tests, or benchmarks based on file location patterns -->
+<!-- [^10]: src/smartDetection.ts:findReferencedModules - Checks for mod declarations, use statements, and include! macros to filter out helper modules from detection -->
+<!-- [^11]: src/cargoToml.ts:moveTargetToStandardLocation - Moves files to conventional directories (src/bin/, examples/, tests/, benches/) for proper target organization -->
+<!-- [^14]: src/targetHealth.ts:analyzeTargetFile - Counts distinct code elements (functions, structs, enums, traits, type aliases, constants, statics) for accurate documentation tracking -->
+<!-- [^15]: src/targetHealth.ts:analyzeTargetFile - Searches each code element for preceding /// or //! doc comments in the source file -->
+<!-- [^16]: src/cargoTreeProvider.ts:buildTargetTreeItems - Displays percentage calculation as "X% (N/M elements)" in tree item tooltips -->
+<!-- [^17]: src/cargoTreeProvider.ts:buildModuleTree - Scans module file for #[test] and #[cfg(test)] attributes to indicate test presence -->
+<!-- [^18]: src/cargoTreeProvider.ts:buildModuleTree - Counts direct children of each module and displays count in tree item label -->
+<!-- [^19]: src/cargoTreeProvider.ts:refresh - Filters module and target display based on selectedWorkspaceMember configuration value -->
+<!-- [^20]: src/decorationProvider.ts:provideFileDecoration - Applies green color to dependencies marked as latest via markAsLatest() -->
+<!-- [^21]: src/decorationProvider.ts:markAsInherited - Applies yellow star icon to dependencies with workspace = true via parseWorkspaceDependencies -->
+<!-- [^23]: src/cargoDiscovery.ts:discoverCargoDependencies - Reads { workspace = true } entries and resolves versions from [workspace.dependencies] -->
+<!-- [^24]: src/cargoDiscovery.ts:discoverCargoDependencies - Extracts version numbers from workspace.dependencies and displays in dependency list -->
+<!-- [^25]: src/cargoTreeProvider.ts:buildDependencyTreeItems - Adds "(from workspace)" text to tooltip when dependency.inherited is true -->
+<!-- [^26]: src/cargoToml.ts:updateDependencyVersions - Updates only successfully fetched versions; keeps original version if fetch fails -->
+<!-- [^28]: src/cargoToml.ts:applyCargoTomlChanges - Calls formatCargoTomlFile() after applying target/feature changes -->
+<!-- [^29]: src/extension.ts - Shows information notification with "Undo" button after auto-formatting completes -->
+<!-- [^30]: src/extension.ts - Provides "Disable Auto-Formatting" button in notification to toggle cargui.autoFormatCargoToml setting -->
+<!-- [^31]: src/defaultConfig.ts - Reads cargui.autoFormatCargoToml configuration value to enable/disable auto-formatting behavior -->
+<!-- [^32]: src/cargoDiscovery.ts:discoverCargoTargets - Checks for src/lib.rs file and adds library target if found -->
+<!-- [^33]: src/cargoDiscovery.ts:discoverCargoTargets - Checks for src/main.rs file and adds main binary target if found -->
+<!-- [^34]: src/cargoDiscovery.ts:discoverCargoTargets - Scans src/bin/ directory and auto-discovers binary targets not explicitly declared -->
+<!-- [^35]: src/cargoDiscovery.ts:discoverCargoTargets - Scans examples/ directory and auto-discovers example targets -->
+<!-- [^36]: src/cargoDiscovery.ts:discoverCargoTargets - Scans tests/ directory and auto-discovers integration test targets -->
+<!-- [^37]: src/cargoDiscovery.ts:discoverCargoTargets - Scans benches/ directory and auto-discovers benchmark targets -->
+<!-- [^38]: src/cargoDiscovery.ts:discoverCargoTargets - Parses [[lib]] section in Cargo.toml for custom library configurations -->
+<!-- [^39]: src/cargoTreeProvider.ts:buildTargetTreeItems - Marks src/main.rs and src/lib.rs with star icon indicator -->
+<!-- [^40]: src/cargoTreeProvider.ts - Displays "Register All" button in Unknowns tree item when undeclared targets exist -->
+<!-- [^41]: src/smartDetection.ts:detectUnregisteredTargets, analyzeTarget - Checks target name matches filename (e.g., target "foo" expects foo.rs or foo/mod.rs) -->
+<!-- [^42]: src/smartDetection.ts:analyzeTarget - Validates that binary targets are in src/bin/, example targets in examples/, etc. -->
+<!-- [^47]: src/cargoTreeProvider.ts:buildFeatureTreeItems - Scans Cargo.toml and source code for feature declarations -->
+<!-- [^48]: src/cargoTreeProvider.ts:buildFeatureTreeItems - Displays undeclared features in red color scheme with "Declare Feature" context menu option -->
+<!-- [^49]: src/cargoTreeProvider.ts - Shows inline button to declare all undeclared features at once -->
+<!-- [^50]: src/cargoTreeProvider.ts:buildFeatureTreeItems - Provides right-click context menu to declare individual features -->
+<!-- [^51]: src/cargoTreeProvider.ts - Changes Features category icon to red when undeclaredFeatures array has entries -->
+<!-- [^100]: src/moduleDetection.ts:buildModuleTree:482-502 - Red color applied to modules where !isDeclared || parentUndeclared, cascading through entire subtree -->
+<!-- [^101]: src/targetHealth.ts:calculateTargetHealthColor - Returns charts.green for modules with 90-100% documented code elements -->
+<!-- [^102]: src/targetHealth.ts:calculateTargetHealthColor - Returns charts.blue for modules with 50-90% documented code elements -->
 
 ---
 
@@ -879,4 +881,3 @@ MIT License - See [LICENSE](LICENSE) file
 **Developed by:** Claude Sonnet 4.5 thru GitHub Copilot
 
 ---
-
