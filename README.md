@@ -97,6 +97,10 @@ Follows Rust best practices automatically!
 
 **Color-coded modules:**
 
+- [^100]🔴 **Red text** = Undeclared module (missing `mod` declaration) - cascades down entire subtree
+- [^101]🟢 **Green text** = Excellent health (90-100% documented)
+- [^102]🔵 **Blue text** = Good health (50-90% documented)
+- ⚪ **Default/no color** = Module needs documentation (< 50% documented)
 
 **Module health calculation (v1.0.8+):**
 
@@ -800,6 +804,54 @@ cargUI/
 ├── cargui-demo/                  # Test workspace
 └── package.json
 ```
+
+---
+
+## 📚 Footnote Definitions
+
+[^1]: src/smartDetection.ts:detectUnregisteredTargets, detectUndeclaredFeatures - Automatically detects unregistered .rs files and undeclared features
+[^2]: src/cargoCommands.ts:buildWithFeature, runCargoTarget, runCargoCommandOnTargets - Provides visual interface for executing cargo commands with customizable flags, features, and environment variables
+[^3]: src/rustup.ts:getRustToolchains, getDefaultToolchain, setDefaultToolchain - Integrates with rustup to display and switch Rust toolchains
+[^4]: src/cargoDiscovery.ts:discoverWorkspaceMembers, discoverCargoTargets - Discovers and displays multi-crate workspace members with intelligent hierarchy
+[^5]: src/targetHealth.ts:calculateTargetHealthColor, analyzeTargetFile - Analyzes code documentation percentage (functions, structs, traits, etc.) and assigns health colors
+[^6]: src/defaultConfig.ts:updateDefaultConfigurationIfNeeded - Manages snapshot configurations for different development scenarios
+[^7]: src/smartDetection.ts:detectUnregisteredTargets - Scans src/ directory for undeclared .rs files and identifies ones not referenced in Cargo.toml
+[^8]: src/smartDetection.ts:detectUndeclaredFeatures - Finds #[cfg(feature = "...")] attributes in source code not declared in [features] section
+[^9]: src/smartDetection.ts:detectUnregisteredTargets - Classifies orphaned files as binaries, examples, tests, or benchmarks based on file location patterns
+[^10]: src/smartDetection.ts:findReferencedModules - Checks for mod declarations, use statements, and include! macros to filter out helper modules from detection
+[^11]: src/cargoToml.ts:moveTargetToStandardLocation - Moves files to conventional directories (src/bin/, examples/, tests/, benches/) for proper target organization
+[^14]: src/targetHealth.ts:analyzeTargetFile - Counts distinct code elements (functions, structs, enums, traits, type aliases, constants, statics) for accurate documentation tracking
+[^15]: src/targetHealth.ts:analyzeTargetFile - Searches each code element for preceding /// or //! doc comments in the source file
+[^16]: src/cargoTreeProvider.ts:buildTargetTreeItems - Displays percentage calculation as "X% (N/M elements)" in tree item tooltips
+[^17]: src/cargoTreeProvider.ts:buildModuleTree - Scans module file for #[test] and #[cfg(test)] attributes to indicate test presence
+[^18]: src/cargoTreeProvider.ts:buildModuleTree - Counts direct children of each module and displays count in tree item label
+[^19]: src/cargoTreeProvider.ts:refresh - Filters module and target display based on selectedWorkspaceMember configuration value
+[^20]: src/decorationProvider.ts:provideFileDecoration - Applies green color to dependencies marked as latest via markAsLatest()
+[^21]: src/decorationProvider.ts:markAsInherited - Applies yellow star icon to dependencies with workspace = true via parseWorkspaceDependencies
+[^23]: src/cargoDiscovery.ts:discoverCargoDependencies - Reads { workspace = true } entries and resolves versions from [workspace.dependencies]
+[^24]: src/cargoDiscovery.ts:discoverCargoDependencies - Extracts version numbers from workspace.dependencies and displays in dependency list
+[^25]: src/cargoTreeProvider.ts:buildDependencyTreeItems - Adds "(from workspace)" text to tooltip when dependency.inherited is true
+[^26]: src/cargoToml.ts:updateDependencyVersions - Updates only successfully fetched versions; keeps original version if fetch fails
+[^28]: src/cargoToml.ts:applyCargoTomlChanges - Calls formatCargoTomlFile() after applying target/feature changes
+[^29]: src/extension.ts - Shows information notification with "Undo" button after auto-formatting completes
+[^30]: src/extension.ts - Provides "Disable Auto-Formatting" button in notification to toggle cargui.autoFormatCargoToml setting
+[^31]: src/defaultConfig.ts - Reads cargui.autoFormatCargoToml configuration value to enable/disable auto-formatting behavior
+[^32]: src/cargoDiscovery.ts:discoverCargoTargets - Checks for src/lib.rs file and adds library target if found
+[^33]: src/cargoDiscovery.ts:discoverCargoTargets - Checks for src/main.rs file and adds main binary target if found
+[^34]: src/cargoDiscovery.ts:discoverCargoTargets - Scans src/bin/ directory and auto-discovers binary targets not explicitly declared
+[^35]: src/cargoDiscovery.ts:discoverCargoTargets - Scans examples/ directory and auto-discovers example targets
+[^36]: src/cargoDiscovery.ts:discoverCargoTargets - Scans tests/ directory and auto-discovers integration test targets
+[^37]: src/cargoDiscovery.ts:discoverCargoTargets - Scans benches/ directory and auto-discovers benchmark targets
+[^38]: src/cargoDiscovery.ts:discoverCargoTargets - Parses [[lib]] section in Cargo.toml for custom library configurations
+[^39]: src/cargoTreeProvider.ts:buildTargetTreeItems - Marks src/main.rs and src/lib.rs with star icon indicator
+[^40]: src/cargoTreeProvider.ts - Displays "Register All" button in Unknowns tree item when undeclared targets exist
+[^41]: src/smartDetection.ts:detectUnregisteredTargets, analyzeTarget - Checks target name matches filename (e.g., target "foo" expects foo.rs or foo/mod.rs)
+[^42]: src/smartDetection.ts:analyzeTarget - Validates that binary targets are in src/bin/, example targets in examples/, etc.
+[^48]: src/cargoTreeProvider.ts:buildFeatureTreeItems - Displays undeclared features in red color scheme with "Declare Feature" context menu option
+[^51]: src/cargoTreeProvider.ts - Changes Features category icon to red when undeclaredFeatures array has entries
+[^100]: src/moduleDetection.ts:buildModuleTree:482-502 - Red color applied to modules where !isDeclared || parentUndeclared, cascading through entire subtree
+[^101]: src/targetHealth.ts:calculateTargetHealthColor - Returns charts.green for modules with 90-100% documented code elements
+[^102]: src/targetHealth.ts:calculateTargetHealthColor - Returns charts.blue for modules with 50-90% documented code elements
 
 ---
 
