@@ -2,6 +2,38 @@
 
 All notable changes to the cargUI extension will be documented in this file.
 
+## [1.3.8] - 2025-12-06
+
+### Fixed
+
+- **Undeclared Module Icon Propagation**: Red icons now cascade through entire module hierarchy
+  - Previously only parent module showed red for undeclared status
+  - Children of undeclared modules now properly inherit red color
+  - Forms visual trail leading from accessible code to the actual undeclared module root cause
+
+### Added
+
+- **Regression Test Suite**: 31 new tests covering bug fixes from this session
+  - Dependency key collision prevention (1 test)
+  - Module detection for both lib.rs and main.rs (3 tests)
+  - Target health color persistence (2 tests)
+  - Module text color display (2 tests)
+  - Target path resolution (1 test)
+  - Cargo commands for workspace members (3 tests)
+  - Dependency color coding (3 tests)
+  - Module declaration context values (3 tests)
+  - Undeclared module icon propagation (5 tests) - NEW
+  - Comprehensive test suite total: 1596 tests (26 previous + 5 new)
+
+### Changed
+
+- **README Documentation**: Converted footnote system to HTML comments
+  - Footnote definitions now hidden from user view
+  - Developer-facing `[^#]` references preserved in HTML comments
+  - Cleaner user-facing documentation without footnote clutter
+  - Added comprehensive code path references with inline comments
+  - 47 code references mapping documentation to implementation
+
 ## [1.3.7] - 2025-12-04
 
 ### Added
